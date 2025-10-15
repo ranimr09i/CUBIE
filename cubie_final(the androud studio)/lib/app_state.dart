@@ -1,0 +1,65 @@
+import 'package:flutter/foundation.dart';
+
+class AppState with ChangeNotifier {
+  int? _currentUserID;
+  String? _currentUserName;
+  int? _selectedChildID;
+  Map<String, dynamic>? _currentChild;
+  List<Map<String, dynamic>> _children = [];
+
+  int? get currentUserID => _currentUserID;
+  String? get currentUserName => _currentUserName;
+  int? get selectedChildID => _selectedChildID;
+  Map<String, dynamic>? get currentChild => _currentChild;
+  List<Map<String, dynamic>> get children => _children;
+
+  void setUser(int userID, String userName) {
+    _currentUserID = userID;
+    _currentUserName = userName;
+    notifyListeners();
+  }
+
+  void setSelectedChild(int childID, Map<String, dynamic> child) {
+    _selectedChildID = childID;
+    _currentChild = child;
+    notifyListeners();
+  }
+
+  void setChildren(List<Map<String, dynamic>> children) {
+    _children = children;
+    notifyListeners();
+  }
+
+  void addChild(Map<String, dynamic> child) {
+    _children.add(child);
+    notifyListeners();
+  }
+
+  void updateChild(int childID, Map<String, dynamic> updatedChild) {
+    final index = _children.indexWhere((child) => child['childID'] == childID);
+    if (index != -1) {
+      _children[index] = updatedChild;
+      notifyListeners();
+    }
+  }
+
+  void removeChild(int childID) {
+    _children.removeWhere((child) => child['childID'] == childID);
+    notifyListeners();
+  }
+
+  void clearSelectedChild() {
+    _selectedChildID = null;
+    _currentChild = null;
+    notifyListeners();
+  }
+
+  void logout() {
+    _currentUserID = null;
+    _currentUserName = null;
+    _selectedChildID = null;
+    _currentChild = null;
+    _children = [];
+    notifyListeners();
+  }
+}
