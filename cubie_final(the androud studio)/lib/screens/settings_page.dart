@@ -27,10 +27,10 @@ class SettingsPage extends StatelessWidget {
                   'مرحباً, ${appState.currentUserName}!',
                   style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold),
                 ),
-                subtitle: Text(
-                  'ID: ${appState.currentUserID}',
-                  style: const TextStyle(color: Colors.white70),
-                ),
+                // subtitle: Text(
+                //   'ID: ${appState.currentUserID}',
+                //   style: const TextStyle(color: Colors.white70),
+                // ),
               ),
             ),
           ],

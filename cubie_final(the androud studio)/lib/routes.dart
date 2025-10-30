@@ -40,7 +40,7 @@ class Routes {
     connectCube: (_) => const ConnectCubePage(),
     history: (_) => const HistoryPage(),
     createStory: (_) => const CreateStoryPage(),
-    // storyProgress: (_) => const StoryProgressPage(),
+     storyProgress: (_) => const StoryProgressPage(),
     error: (_) => const ErrorPage(),
   };
 }

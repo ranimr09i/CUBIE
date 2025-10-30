@@ -1,169 +1,159 @@
+// lib/screens/connect_cube.dart
+
+import 'dart:async';
 import 'package:flutter/material.dart';
+import 'package:flutter_bluetooth_serial/flutter_bluetooth_serial.dart';
+import '../services/bluetooth_manager.dart'; // استيراد المدير الجديد
 import '../widgets/app_scaffold.dart';
 
-class ConnectCubePage extends StatelessWidget {
+class ConnectCubePage extends StatefulWidget {
   const ConnectCubePage({super.key});
 
-  void _connectToCube(BuildContext context) {
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(
-        content: Text('🔗 جاري الاتصال بالمكعب...'),
-        duration: Duration(seconds: 2),
-      ),
-    );
+  @override
+  State<ConnectCubePage> createState() => _ConnectCubePageState();
+}
 
-    Future.delayed(const Duration(seconds: 2), () {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('✅ تم الاتصال بالمكعب بنجاح'),
-          duration: Duration(seconds: 2),
-        ),
-      );
+class _ConnectCubePageState extends State<ConnectCubePage> {
+  final btManager = BluetoothManager.instance;
+  StreamSubscription<BluetoothDiscoveryResult>? _streamSubscription;
+  List<BluetoothDiscoveryResult> results = [];
+  bool isDiscovering = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _startDiscovery();
+  }
+
+  void _startDiscovery() {
+    setState(() {
+      isDiscovering = true;
+      results.clear();
+    });
+
+    _streamSubscription = FlutterBluetoothSerial.instance.startDiscovery().listen((r) {
+      // تجنب إضافة أجهزة بدون اسم أو مكررة
+      final existingIndex = results.indexWhere((element) => element.device.address == r.device.address);
+      if (existingIndex < 0 && r.device.name != null) {
+        setState(() {
+          results.add(r);
+        });
+      }
+    });
+
+    _streamSubscription!.onDone(() {
+      setState(() {
+        isDiscovering = false;
+      });
     });
   }
 
-  void _testConnection(BuildContext context) {
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(
-        content: Text('🧪 جاري اختبار الاتصال...'),
-        duration: Duration(seconds: 1),
-      ),
-    );
-
-    Future.delayed(const Duration(seconds: 1), () {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('✅ الاتصال يعمل بشكل صحيح'),
-          duration: Duration(seconds: 2),
-        ),
-      );
-    });
+  @override
+  void dispose() {
+    _streamSubscription?.cancel();
+    super.dispose();
   }
 
   @override
   Widget build(BuildContext context) {
     return AppScaffold(
       title: 'الاتصال بالمكعب',
-      body: Padding(
-        padding: const EdgeInsets.all(14.0),
-        child: Column(
-          children: [
-            const SizedBox(height: 20),
-            const Icon(
-              Icons.bluetooth,
-              size: 80,
-              color: Color(0xff4ab0d1),
-            ),
-            const SizedBox(height: 16),
-            const Text(
-              'اتصل بالمكعب الذكي',
-              style: TextStyle(
-                fontSize: 20,
-                fontWeight: FontWeight.bold,
-                color: Color(0xff254865),
-              ),
-            ),
-            const SizedBox(height: 8),
-            const Text(
-              'قم بالاتصال بالمكعب التفاعلي لبدء رحلة القصص',
-              style: TextStyle(
-                fontSize: 16,
-                color: Colors.black54,
-              ),
-              textAlign: TextAlign.center,
-            ),
-            const SizedBox(height: 30),
-
-            Card(
-              child: ListTile(
-                leading: const Icon(Icons.bluetooth_searching, size: 36, color: Color(0xff4ab0d1)),
-                title: const Text(
-                  'Cube-ESP32',
-                  style: TextStyle(fontWeight: FontWeight.bold, color: Color(0xff254865)),
-                ),
-                subtitle: const Text('قابل للاتصال - قوة الإشارة: ممتاز'),
-                trailing: ElevatedButton(
-                  onPressed: () => _connectToCube(context),
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: const Color(0xff4ab0d1),
-                    foregroundColor: const Color(0xff254865),
-                  ),
-                  child: const Text('اتصال'),
-                ),
-              ),
-            ),
-
-            const SizedBox(height: 20),
-
-            Card(
-              color: const Color(0xffe6eceb),
-              child: Padding(
-                padding: const EdgeInsets.all(16.0),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    const Text(
-                      'تعليمات الاتصال:',
-                      style: TextStyle(
-                        fontWeight: FontWeight.bold,
-                        color: Color(0xff254865),
+      body: Column(
+        children: [
+          // --- 1. عرض حالة الاتصال الحالية ---
+          ValueListenableBuilder<bool>(
+            valueListenable: btManager.isConnectedNotifier,
+            builder: (context, isConnected, child) {
+              if (isConnected) {
+                return Container(
+                  color: Colors.green.withOpacity(0.1),
+                  padding: const EdgeInsets.all(12.0),
+                  child: Row(
+                    children: [
+                      const Icon(Icons.check_circle, color: Colors.green),
+                      const SizedBox(width: 12),
+                      Expanded(
+                        child: Text(
+                          'متصل حاليًا بـ: ${btManager.deviceName ?? 'المكعب'}',
+                          style: const TextStyle(fontWeight: FontWeight.bold),
+                        ),
                       ),
-                    ),
-                    const SizedBox(height: 8),
-                    _buildInstruction('1. تأكد من تشغيل البلوتوث'),
-                    _buildInstruction('2. قرب الجهاز من المكعب'),
-                    _buildInstruction('3. انقر على زر "اتصال"'),
-                    _buildInstruction('4. انتظر حتى يكتمل الاتصال'),
-                  ],
-                ),
-              ),
-            ),
+                      TextButton(
+                        onPressed: () => btManager.disconnect(),
+                        child: const Text('قطع الاتصال'),
+                      ),
+                    ],
+                  ),
+                );
+              }
+              // إذا لم يكن متصلاً، لا تعرض شيئًا
+              return const SizedBox.shrink();
+            },
+          ),
 
-            const SizedBox(height: 30),
-
-            Row(
+          // --- 2. زر إعادة البحث وحالة البحث ---
+          Padding(
+            padding: const EdgeInsets.all(8.0),
+            child: Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
-                Expanded(
-                  child: ElevatedButton.icon(
-                    onPressed: () => _testConnection(context),
-                    icon: const Icon(Icons.settings_input_antenna),
-                    label: const Text('اختبار الاتصال'),
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: const Color(0xff8dd6bb),
-                      foregroundColor: const Color(0xff254865),
-                      padding: const EdgeInsets.symmetric(vertical: 16),
-                    ),
-                  ),
+                Text(
+                  isDiscovering ? 'جاري البحث عن أجهزة...' : 'الأجهزة المتاحة:',
+                  style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
                 ),
-                const SizedBox(width: 12),
-                Expanded(
-                  child: ElevatedButton.icon(
-                    onPressed: () => Navigator.pop(context),
-                    icon: const Icon(Icons.arrow_back),
-                    label: const Text('العودة'),
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: const Color(0xff4ab0d1),
-                      foregroundColor: const Color(0xff254865),
-                      padding: const EdgeInsets.symmetric(vertical: 16),
-                    ),
+                if (isDiscovering)
+                  const SizedBox(
+                    width: 20,
+                    height: 20,
+                    child: CircularProgressIndicator(strokeWidth: 2),
+                  )
+                else
+                  IconButton(
+                    icon: const Icon(Icons.refresh),
+                    onPressed: _startDiscovery,
                   ),
-                ),
               ],
             ),
-          ],
-        ),
-      ),
-    );
-  }
+          ),
 
-  Widget _buildInstruction(String text) {
-    return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 4.0),
-      child: Row(
-        children: [
-          const Icon(Icons.check_circle, size: 16, color: Color(0xff4ab0d1)),
-          const SizedBox(width: 8),
-          Expanded(child: Text(text, style: const TextStyle(color: Colors.black54))),
+          // --- 3. قائمة الأجهزة التي تم العثور عليها ---
+          Expanded(
+            child: results.isEmpty && !isDiscovering
+                ? const Center(child: Text('لم يتم العثور على أجهزة.\nتأكد من أن البلوتوث والمكعب يعملان.'))
+                : ListView.builder(
+              itemCount: results.length,
+              itemBuilder: (BuildContext context, index) {
+                BluetoothDiscoveryResult result = results[index];
+                return Card(
+                  margin: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                  child: ListTile(
+                    leading: const Icon(Icons.widgets, color: Color(0xff4ab0d1)),
+                    title: Text(result.device.name ?? 'جهاز غير معروف'),
+                    subtitle: Text(result.device.address),
+                    trailing: ElevatedButton(
+                      child: const Text('اتصال'),
+                      onPressed: () async {
+                        // إيقاف البحث قبل محاولة الاتصال
+                        _streamSubscription?.cancel();
+                        setState(() => isDiscovering = false);
+
+                        bool success = await btManager.connect(result.device);
+                        if (success && mounted) {
+                          ScaffoldMessenger.of(context).showSnackBar(
+                            SnackBar(content: Text('تم الاتصال بنجاح بـ ${result.device.name}')),
+                          );
+                        } else if (mounted) {
+                          ScaffoldMessenger.of(context).showSnackBar(
+                            const SnackBar(content: Text('فشل الاتصال، حاول مرة أخرى')),
+                          );
+                        }
+                      },
+                    ),
+                  ),
+                );
+              },
+            ),
+          ),
         ],
       ),
     );
