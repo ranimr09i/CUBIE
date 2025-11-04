@@ -24,7 +24,7 @@ class CubieUIApp extends StatelessWidget {
         primaryColor: const Color(0xff254865),
         scaffoldBackgroundColor: const Color(0xffe6eceb),
         appBarTheme: const AppBarTheme(
-          backgroundColor: Color(0xff254865),
+          backgroundColor: Color(0xff224562),
           foregroundColor: Colors.white,
           iconTheme: IconThemeData(color: Color(0xff8dd6bb)),
         ),
