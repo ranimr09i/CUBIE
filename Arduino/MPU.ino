@@ -693,15 +693,266 @@
 // }
 
 
+
+
+
+
+
+
+
+
+
+
+// #include <Wire.h>
+// #include <MPU6050.h>
+// #include "BluetoothSerial.h" // للبلوتوث
+// #include <WiFi.h>              // للواي فاي
+
+// // --- مكتبات الصوت (للإنترنت فقط) ---
+// #include "AudioOutputI2S.h"
+// #include "AudioFileSourceHTTPStream.h" // <-- لبث الصوت من الإنترنت
+// #include "AudioGeneratorMP3.h"         // <-- لتشغيل الـ MP3
+
+// // ===================================
+// // !!      إعدادات الواي فاي      !!
+// // ===================================
+// const char* ssid = "HUAWEI_E5567_3656";     // (شبكتك)
+// const char* password = "3GqA8bGYd3G"; // (شبكتك)
+// // ===================================
+
+// // --- منفذ مفتاح الأمان (لحل مشكلة الطاقة) ---
+// #define SHUTDOWN_PIN 4 // (P4) موصول بـ SD
+
+// // --- إعدادات البلوتوث ---
+// BluetoothSerial SerialBT;
+
+// // --- إعدادات السماعة (مطابقة لأسلاكك) ---
+// #define I2S_DOUT 25
+// #define I2S_BCLK 26
+// #define I2S_LRC  27
+
+// // --- كائنات الصوت (للقصص من الإنترنت) ---
+// AudioGeneratorMP3 *mp3 = nullptr;
+// AudioFileSourceHTTPStream *file_http = nullptr;
+// AudioOutputI2S *out = nullptr;
+
+// // --- إعدادات حساس الحركة ---
+// MPU6050 mpu(0x68);
+// const float LIMIT_DEG = 20.0;
+// const float SHAKE_LIMIT_G = 0.7;
+// const float ACCEL_SCALE = 16384.0;
+// int16_t accelX, accelY, accelZ, gyroX, gyroY, gyroZ;
+
+// // --- متغيرات حالة التشغيل ---
+// bool isQuestionActive = false;
+// String mode = "";
+// String answer = "";
+
+// // ------------------------------------
+// // !! دالة إيقاف *كل* الأصوات !!
+// // ------------------------------------
+// void stopAudio() {
+//   if (mp3) { 
+//     if (mp3->isRunning()) mp3->stop();
+//     delete mp3; mp3 = nullptr;
+//   }
+//   if (file_http) {
+//     delete file_http; file_http = nullptr;
+//   }
+//   if (out) {
+//     out->stop();
+//     delete out; out = nullptr;
+//   }
+//   digitalWrite(SHUTDOWN_PIN, HIGH); // "نوّم" السماعة
+// }
+
+// // ------------------------------------
+// // !! دالة تشغيل القصة (من الإنترنت) !!
+// // ------------------------------------
+// void playFileFromURL(const char* url) {
+//   stopAudio(); // أوقف أي شيء شغال
+
+//   digitalWrite(SHUTDOWN_PIN, LOW); // "أيقظ" السماعة
+//   delay(10); 
+//   Serial.println("Amplifier is WOKE. Playing from URL...");
+//   Serial.println(url);
+
+//   file_http = new AudioFileSourceHTTPStream(url);
+  
+//   // (الحل لمشكلة تعليق الصوت)
+//   // نخبره بألا يستخدم الذاكرة السريعة (DMA)
+//   out = new AudioOutputI2S(0, false); // (port 0, use_dma = false)
+  
+//   out->SetPinout(I2S_BCLK, I2S_LRC, I2S_DOUT); 
+//   out->begin();
+  
+//   mp3 = new AudioGeneratorMP3();
+//   mp3->begin(file_http, out);
+// }
+
+// // ------------------------------------
+// // التعامل مع أوامر البلوتوث (من التطبيق)
+// // ------------------------------------
+// void handleBluetoothCommands() {
+//   while (SerialBT.available()) { 
+//     String command = SerialBT.readStringUntil('\n');
+//     command.trim();
+//     command.toUpperCase(); 
+
+//     // (أمر بدء السؤال)
+//     if (command.startsWith("START")) {
+//       mode = command.substring(5);
+//       mode.trim();
+//       isQuestionActive = true;
+//       answer = "";
+//       SerialBT.println("READY:" + mode); // إرسال جاهزية للتطبيق
+//       Serial.println("READY:" + mode); // للـ Serial Monitor
+//     }
+//     // (أمر تشغيل الصوت)
+//     else if (command.startsWith("PLAY:")) {
+//       String url = command.substring(5);
+//       url.trim(); 
+//       playFileFromURL(url.c_str());
+//     }
+//     // (أمر إيقاف الصوت)
+//     else if (command == "STOP_AUDIO") {
+//       stopAudio();
+//     }
+//   }
+// }
+
+// // ------------------------------------
+// // دوال رصد الحركة
+// // ------------------------------------
+// void detectShake() {
+//   float acc_g = sqrt((float)accelX*accelX + (float)accelY*accelY + (float)accelZ*accelZ) / ACCEL_SCALE;
+//   if (fabs(acc_g - 1.0) > SHAKE_LIMIT_G) {
+//     answer = "SHAKE";
+//     Serial.println(answer);
+//     SerialBT.println(answer); // إرسال الجواب للتطبيق
+//     isQuestionActive = false;
+//   }
+// }
+// void detectY() {
+//   float angleY = atan2(accelX, sqrt(accelY*accelY + accelZ*accelZ)) * 180.0 / PI;
+//   if (angleY > LIMIT_DEG) {
+//     answer = "FORWARD";
+//     Serial.println(answer);
+//     SerialBT.println(answer); // إرسال الجواب للتطبيق
+//     isQuestionActive = false;
+//   } else if (angleY < -LIMIT_DEG) {
+//     answer = "BACK";
+//     Serial.println(answer);
+//     SerialBT.println(answer); // إرسال الجواب للتطبيق
+//     isQuestionActive = false;
+//   }
+// }
+// void detectZ() {
+//   float angleZ = atan2(accelY, accelZ) * 180.0 / PI;
+//   if (angleZ > LIMIT_DEG) {
+//     answer = "RIGHT";
+//     Serial.println(answer);
+//     SerialBT.println(answer); // إرسال الجواب للتطبيق
+//     isQuestionActive = false;
+//   } else if (angleZ < -LIMIT_DEG) {
+//     answer = "LEFT";
+//     Serial.println(answer);
+//     SerialBT.println(answer); // إرسال الجواب للتطبيق
+//     isQuestionActive = false;
+//   }
+// }
+
+// // ------------------------------------
+// // Setup
+// // ------------------------------------
+// void setup() {
+//   Serial.begin(115200);
+
+//   // --- 1. إعداد مفتاح الأمان (SD Pin) ---
+//   pinMode(SHUTDOWN_PIN, OUTPUT);
+//   digitalWrite(SHUTDOWN_PIN, HIGH); // "نوّم" السماعة فوراً
+//   Serial.println("Amplifier put to sleep immediately.");
+  
+//   // --- 2. تشغيل البلوتوث ---
+//   SerialBT.begin("CUBIE"); 
+//   Serial.println("Cube is ready for Bluetooth connection...");
+
+//   // --- 3. تشغيل حساس الحركة ---
+//   Wire.begin(21, 22);
+//   mpu.initialize();
+//   Serial.println("Testing MPU6050 connection...");
+//   if (mpu.testConnection()) {
+//     Serial.println("MPU6050 connection successful!");
+//     mpu.setSleepEnabled(false);
+//   } else {
+//     Serial.println("MPU6050 connection failed! Check wiring.");
+//   }
+
+//   // --- 4. تشغيل الواي فاي !! ---
+//   Serial.print("Connecting to WiFi: ");
+//   Serial.println(ssid);
+//   WiFi.begin(ssid, password);
+//   int wifi_retries = 20;
+//   while (WiFi.status() != WL_CONNECTED && wifi_retries > 0) {
+//     delay(500);
+//     Serial.print(".");
+//     wifi_retries--;
+//   }
+
+//   if (WiFi.status() != WL_CONNECTED) {
+//      Serial.println("");
+//      Serial.println("WiFi connection FAILED! Check SSID and Password.");
+//   } else {
+//     Serial.println("");
+//     Serial.println("WiFi connected!");
+//     Serial.print("IP address: ");
+//     Serial.println(WiFi.localIP());
+//   }
+
+//   Serial.println("--- System Ready ---");
+// }
+
+// // ------------------------------------
+// // Loop
+// // ------------------------------------
+// void loop() {
+//   handleBluetoothCommands(); // استقبال أوامر من الجوال
+
+//   // رصد الحركة (إذا كان هناك سؤال)
+//   if (isQuestionActive && answer.length() == 0) {
+//     mpu.getMotion6(&accelX, &accelY, &accelZ, &gyroX, &gyroY, &gyroZ);
+//     if (mode == "SHAKE") detectShake();
+//     else if (mode == "TILTY") detectY();
+//     else if (mode == "TILTZ") detectZ();
+//   }
+
+//   // --- سطر مهم لتشغيل صوت الإنترنت ---
+//   if (mp3 && mp3->isRunning()) {
+//     if (!mp3->loop()) {
+//       stopAudio(); // أوقف الصوت عند الانتهاء
+//       Serial.println("MP3 Stream Finished.");
+//       SerialBT.println("AUDIO:FINISHED");
+//     }
+//   }
+  
+//   delay(50);
+// }
+
 #include <Wire.h>
 #include <MPU6050.h>
-#include "BluetoothSerial.h" // للبلوتوث
-#include <WiFi.h>              // للواي فاي
+#include <WiFi.h>
 
-// --- مكتبات الصوت (للإنترنت فقط) ---
-#include "AudioOutputI2S.h"
-#include "AudioFileSourceHTTPStream.h" // <-- لبث الصوت من الإنترنت
-#include "AudioGeneratorMP3.h"         // <-- لتشغيل الـ MP3
+// --- مكتبات الصوت الجديدة (بديلة ESP8266Audio) ---
+#include "AudioFileSourceHTTPStream.h" // لجلب الصوت من http
+#include "AudioFileSourceBuffer.h"     // لتخزين مؤقت
+#include "AudioGeneratorMP3.h"         // لفك تشفير MP3
+#include "AudioOutputI2S.h"            // لإخراج الصوت للسماعة
+
+// --- مكتبات البلوتوث الجديدة (BLE) ---
+#include <BLEDevice.h>
+#include <BLEServer.h>
+#include <BLEUtils.h>
+#include <BLE2902.h>
 
 // ===================================
 // !!      إعدادات الواي فاي      !!
@@ -713,18 +964,10 @@ const char* password = "3GqA8bGYd3G"; // (شبكتك)
 // --- منفذ مفتاح الأمان (لحل مشكلة الطاقة) ---
 #define SHUTDOWN_PIN 4 // (P4) موصول بـ SD
 
-// --- إعدادات البلوتوث ---
-BluetoothSerial SerialBT;
-
 // --- إعدادات السماعة (مطابقة لأسلاكك) ---
 #define I2S_DOUT 25
 #define I2S_BCLK 26
 #define I2S_LRC  27
-
-// --- كائنات الصوت (للقصص من الإنترنت) ---
-AudioGeneratorMP3 *mp3 = nullptr;
-AudioFileSourceHTTPStream *file_http = nullptr;
-AudioOutputI2S *out = nullptr;
 
 // --- إعدادات حساس الحركة ---
 MPU6050 mpu(0x68);
@@ -733,25 +976,56 @@ const float SHAKE_LIMIT_G = 0.7;
 const float ACCEL_SCALE = 16384.0;
 int16_t accelX, accelY, accelZ, gyroX, gyroY, gyroZ;
 
+// --- كائنات الصوت (الجديدة) ---
+AudioGeneratorMP3 *mp3;
+AudioFileSourceHTTPStream *file_http;
+AudioFileSourceBuffer *buff;
+AudioOutputI2S *out;
+
 // --- متغيرات حالة التشغيل ---
 bool isQuestionActive = false;
 String mode = "";
 String answer = "";
 
+// ===================================
+// !!      إعدادات البلوتوث BLE      !!
+// ===================================
+BLEServer *pServer = NULL;
+BLEService *pService = NULL;
+BLECharacteristic *pCommandCharacteristic = NULL;  // لاستقبال الأوامر (WRITE)
+BLECharacteristic *pResponseCharacteristic = NULL; // لإرسال الردود (NOTIFY)
+bool deviceConnected = false;
+std::string commandValue = "";
+
+// تعريف UUIDs (أرقام تعريفية فريدة)
+#define SERVICE_UUID        "4fafc201-1fb5-459e-8fcc-c5c9c331914b"
+#define COMMAND_CHAR_UUID   "beb5483e-36e1-4688-b7f5-ea07361b26a8" // (للاستقبال: START, PLAY)
+#define RESPONSE_CHAR_UUID  "c3856242-4f7f-4a6c-b3d4-4a6e43f5a25c" // (للإرسال: READY, RIGHT, LEFT)
+
+
 // ------------------------------------
 // !! دالة إيقاف *كل* الأصوات !!
 // ------------------------------------
 void stopAudio() {
-  if (mp3) { 
-    if (mp3->isRunning()) mp3->stop();
-    delete mp3; mp3 = nullptr;
+  if (mp3 && mp3->isRunning()) {
+    mp3->stop();
+    delete mp3;
+    mp3 = nullptr;
+  }
+  if (buff) {
+    buff->close();
+    delete buff;
+    buff = nullptr;
   }
   if (file_http) {
-    delete file_http; file_http = nullptr;
+    file_http->close();
+    delete file_http;
+    file_http = nullptr;
   }
   if (out) {
     out->stop();
-    delete out; out = nullptr;
+    delete out;
+    out = nullptr;
   }
   digitalWrite(SHUTDOWN_PIN, HIGH); // "نوّم" السماعة
 }
@@ -768,58 +1042,66 @@ void playFileFromURL(const char* url) {
   Serial.println(url);
 
   file_http = new AudioFileSourceHTTPStream(url);
-  
-  // (الحل لمشكلة تعليق الصوت)
-  // نخبره بألا يستخدم الذاكرة السريعة (DMA)
-  out = new AudioOutputI2S(0, false); // (port 0, use_dma = false)
+  buff = new AudioFileSourceBuffer(file_http, 2048); // إضافة Buffer لتحسين الأداء
+  out = new AudioOutputI2S();
   
   out->SetPinout(I2S_BCLK, I2S_LRC, I2S_DOUT); 
-  out->begin();
+  out->SetGain(0.5); // (يمكنك تعديل مستوى الصوت هنا)
   
   mp3 = new AudioGeneratorMP3();
-  mp3->begin(file_http, out);
+  mp3->begin(buff, out);
 }
 
 // ------------------------------------
-// التعامل مع أوامر البلوتوث (من التطبيق)
+// !!    إرسال رد عبر BLE   !!
 // ------------------------------------
-void handleBluetoothCommands() {
-  while (SerialBT.available()) { 
-    String command = SerialBT.readStringUntil('\n');
-    command.trim();
-    command.toUpperCase(); 
-
-    // (أمر بدء السؤال)
-    if (command.startsWith("START")) {
-      mode = command.substring(5);
-      mode.trim();
-      isQuestionActive = true;
-      answer = "";
-      SerialBT.println("READY:" + mode); // إرسال جاهزية للتطبيق
-      Serial.println("READY:" + mode); // للـ Serial Monitor
-    }
-    // (أمر تشغيل الصوت)
-    else if (command.startsWith("PLAY:")) {
-      String url = command.substring(5);
-      url.trim(); 
-      playFileFromURL(url.c_str());
-    }
-    // (أمر إيقاف الصوت)
-    else if (command == "STOP_AUDIO") {
-      stopAudio();
-    }
+void sendBleResponse(String message) {
+  if (deviceConnected) {
+    pResponseCharacteristic->setValue(message.c_str());
+    pResponseCharacteristic->notify();
+    Serial.print("BLE Notify >> "); // للـ Serial Monitor
+    Serial.println(message);
   }
 }
 
 // ------------------------------------
-// دوال رصد الحركة
+// !!    معالجة أوامر BLE   !!
+// ------------------------------------
+void processBleCommand(std::string cmd) {
+  String command = String(cmd.c_str());
+  command.trim();
+  command.toUpperCase();
+  Serial.print("BLE Received << "); // للـ Serial Monitor
+  Serial.println(command);
+
+  // (أمر بدء السؤال)
+  if (command.startsWith("START")) {
+    mode = command.substring(5);
+    mode.trim();
+    isQuestionActive = true;
+    answer = "";
+    sendBleResponse("READY:" + mode); // إرسال جاهزية للتطبيق
+  }
+  // (أمر تشغيل الصوت)
+  else if (command.startsWith("PLAY:")) {
+    String url = command.substring(5);
+    url.trim(); 
+    playFileFromURL(url.c_str());
+  }
+  // (أمر إيقاف الصوت)
+  else if (command == "STOP_AUDIO") {
+    stopAudio();
+  }
+}
+
+// ------------------------------------
+// دوال رصد الحركة (معدلة لـ BLE)
 // ------------------------------------
 void detectShake() {
   float acc_g = sqrt((float)accelX*accelX + (float)accelY*accelY + (float)accelZ*accelZ) / ACCEL_SCALE;
   if (fabs(acc_g - 1.0) > SHAKE_LIMIT_G) {
     answer = "SHAKE";
-    Serial.println(answer);
-    SerialBT.println(answer); // إرسال الجواب للتطبيق
+    sendBleResponse(answer); // إرسال الجواب للتطبيق
     isQuestionActive = false;
   }
 }
@@ -827,13 +1109,11 @@ void detectY() {
   float angleY = atan2(accelX, sqrt(accelY*accelY + accelZ*accelZ)) * 180.0 / PI;
   if (angleY > LIMIT_DEG) {
     answer = "FORWARD";
-    Serial.println(answer);
-    SerialBT.println(answer); // إرسال الجواب للتطبيق
+    sendBleResponse(answer); // إرسال الجواب للتطبيق
     isQuestionActive = false;
   } else if (angleY < -LIMIT_DEG) {
     answer = "BACK";
-    Serial.println(answer);
-    SerialBT.println(answer); // إرسال الجواب للتطبيق
+    sendBleResponse(answer); // إرسال الجواب للتطبيق
     isQuestionActive = false;
   }
 }
@@ -841,16 +1121,43 @@ void detectZ() {
   float angleZ = atan2(accelY, accelZ) * 180.0 / PI;
   if (angleZ > LIMIT_DEG) {
     answer = "RIGHT";
-    Serial.println(answer);
-    SerialBT.println(answer); // إرسال الجواب للتطبيق
+    sendBleResponse(answer); // إرسال الجواب للتطبيق
     isQuestionActive = false;
   } else if (angleZ < -LIMIT_DEG) {
     answer = "LEFT";
-    Serial.println(answer);
-    SerialBT.println(answer); // إرسال الجواب للتطبيق
+    sendBleResponse(answer); // إرسال الجواب للتطبيق
     isQuestionActive = false;
   }
 }
+
+// ===================================
+// !!      كلاسات البلوتوث BLE      !!
+// ===================================
+
+// كلاس للتعامل مع الاتصال (connect/disconnect)
+class MyServerCallbacks: public BLEServerCallbacks {
+    void onConnect(BLEServer* pServer) {
+      deviceConnected = true;
+      Serial.println("Device connected");
+    }
+
+    void onDisconnect(BLEServer* pServer) {
+      deviceConnected = false;
+      Serial.println("Device disconnected");
+      BLEDevice::startAdvertising(); // ارجع للإعلان عن نفسك
+      Serial.println("Start advertising...");
+    }
+};
+
+// كلاس للتعامل مع استقبال الأوامر (onWrite)
+class MyCommandCallbacks: public BLECharacteristicCallbacks {
+    void onWrite(BLECharacteristic *pCharacteristic) {
+      std::string value = pCharacteristic->getValue().c_str();
+      if (value.length() > 0) {
+        processBleCommand(value); // استدعاء دالة معالجة الأوامر
+      }
+    }
+};
 
 // ------------------------------------
 // Setup
@@ -863,9 +1170,38 @@ void setup() {
   digitalWrite(SHUTDOWN_PIN, HIGH); // "نوّم" السماعة فوراً
   Serial.println("Amplifier put to sleep immediately.");
   
-  // --- 2. تشغيل البلوتوث ---
-  SerialBT.begin("CUBIE"); 
-  Serial.println("Cube is ready for Bluetooth connection...");
+  // --- 2. تشغيل البلوتوث BLE (بدلاً من SerialBT) ---
+  Serial.println("Starting BLE...");
+  BLEDevice::init("CUBIE"); // هذا هو الاسم الذي سيظهر في الجوال
+  
+  pServer = BLEDevice::createServer();
+  pServer->setCallbacks(new MyServerCallbacks());
+  
+  pService = pServer->createService(SERVICE_UUID);
+  
+  // إنشاء خاصية استقبال الأوامر (App -> ESP32)
+  pCommandCharacteristic = pService->createCharacteristic(
+                             COMMAND_CHAR_UUID,
+                             BLECharacteristic::PROPERTY_WRITE
+                           );
+  pCommandCharacteristic->setCallbacks(new MyCommandCallbacks());
+
+  // إنشاء خاصية إرسال الردود (ESP32 -> App)
+  pResponseCharacteristic = pService->createCharacteristic(
+                              RESPONSE_CHAR_UUID,
+                              BLECharacteristic::PROPERTY_NOTIFY
+                            );
+  pResponseCharacteristic->addDescriptor(new BLE2902()); // مهم للإشعارات
+  
+  pService->start();
+  
+  BLEAdvertising *pAdvertising = BLEDevice::getAdvertising();
+  pAdvertising->addServiceUUID(SERVICE_UUID);
+  pAdvertising->setScanResponse(true);
+  pAdvertising->setMinPreferred(0x06); 
+  pAdvertising->setMinPreferred(0x12);
+  BLEDevice::startAdvertising();
+  Serial.println("BLE Advertising started. Waiting for client...");
 
   // --- 3. تشغيل حساس الحركة ---
   Wire.begin(21, 22);
@@ -899,14 +1235,16 @@ void setup() {
     Serial.println(WiFi.localIP());
   }
 
-  Serial.println("--- System Ready ---");
+  Serial.println("--- System Ready (WiFi + BLE) ---");
 }
 
 // ------------------------------------
 // Loop
 // ------------------------------------
 void loop() {
-  handleBluetoothCommands(); // استقبال أوامر من الجوال
+  
+  // لا نحتاج لـ handleBluetoothCommands() هنا
+  // لأن الـ BLE يعمل بالكولباك (onWrite)
 
   // رصد الحركة (إذا كان هناك سؤال)
   if (isQuestionActive && answer.length() == 0) {
@@ -921,7 +1259,7 @@ void loop() {
     if (!mp3->loop()) {
       stopAudio(); // أوقف الصوت عند الانتهاء
       Serial.println("MP3 Stream Finished.");
-      SerialBT.println("AUDIO:FINISHED");
+      sendBleResponse("AUDIO:FINISHED");
     }
   }
   
