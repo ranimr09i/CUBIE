@@ -2,15 +2,21 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'routes.dart';
 import 'app_state.dart';
-
+import 'services/bluetooth_manager.dart';
 void main() {
   runApp(
-    ChangeNotifierProvider(
-      create: (context) => AppState(),
+    // 2. التغيير إلى MultiProvider لإتاحة أكثر من حالة
+    MultiProvider(
+      providers: [
+        ChangeNotifierProvider(create: (context) => AppState()),
+        ChangeNotifierProvider(create: (context) => BluetoothManager()), // <-- 3. إضافة مدير البلوتوث هنا
+      ],
       child: const CubieUIApp(),
     ),
   );
 }
+
+
 
 class CubieUIApp extends StatelessWidget {
   const CubieUIApp({super.key});

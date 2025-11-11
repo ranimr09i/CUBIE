@@ -63,6 +63,184 @@
 //     notifyListeners();
 //   }
 // }
+// import 'package:flutter/foundation.dart';
+//
+// class AppState with ChangeNotifier {
+//   int? _currentUserID;
+//   String? _currentUserName;
+//   int? _selectedChildID;
+//   Map<String, dynamic>? _currentChild;
+//   List<Map<String, dynamic>> _children = [];
+//
+//   int? get currentUserID => _currentUserID;
+//   String? get currentUserName => _currentUserName;
+//   int? get selectedChildID => _selectedChildID;
+//   Map<String, dynamic>? get currentChild => _currentChild;
+//   List<Map<String, dynamic>> get children => _children;
+//
+//   void setUser(int userID, String userName) {
+//     _currentUserID = userID;
+//     _currentUserName = userName;
+//     notifyListeners();
+//   }
+//
+//   void setSelectedChild(int childID, Map<String, dynamic> child) {
+//     _selectedChildID = childID;
+//     _currentChild = child;
+//     notifyListeners();
+//   }
+//
+//   void setChildren(List<Map<String, dynamic>> children) {
+//     _children = children;
+//     notifyListeners();
+//   }
+//
+//   void addChild(Map<String, dynamic> child) {
+//     _children.add(child);
+//     notifyListeners();
+//   }
+//
+//   void updateChild(int childID, Map<String, dynamic> updatedChild) {
+//     final index = _children.indexWhere((child) => child['childID'] == childID);
+//     if (index != -1) {
+//       _children[index] = updatedChild;
+//
+//       // (1) --- إضافة مهمة ---
+//       // (إذا كان الطفل المعدل هو الطفل المختار حالياً، قم بتحديث بياناته)
+//       if (_selectedChildID == childID) {
+//         _currentChild = updatedChild;
+//       }
+//       // --------------------
+//
+//       notifyListeners();
+//     }
+//   }
+//
+//   void removeChild(int childID) {
+//     _children.removeWhere((child) => child['childID'] == childID);
+//
+//     // (2) --- إضافة مهمة ---
+//     // (إذا تم حذف الطفل المختار، قم بإلغاء اختياره)
+//     if (_selectedChildID == childID) {
+//       _selectedChildID = null;
+//       _currentChild = null;
+//     }
+//     // --------------------
+//     notifyListeners();
+//   }
+//
+//   void clearSelectedChild() {
+//     _selectedChildID = null;
+//     _currentChild = null;
+//     notifyListeners();
+//   }
+//
+//   void logout() {
+//     _currentUserID = null;
+//     _currentUserName = null;
+//     _selectedChildID = null;
+//     _currentChild = null;
+//     _children = [];
+//     notifyListeners();
+//   }
+// }
+// import 'package:flutter/foundation.dart';
+//
+// class AppState with ChangeNotifier {
+//   int? _currentUserID;
+//   String? _currentUserName;
+//   int? _selectedChildID;
+//   Map<String, dynamic>? _currentChild;
+//   List<Map<String, dynamic>> _children = [];
+//
+//   // !! --- (الإضافة الجديدة هنا) --- !!
+//   int? _currentStoryID;
+//   String? _currentStoryTitle;
+//   // !! -------------------------- !!
+//
+//
+//   int? get currentUserID => _currentUserID;
+//   String? get currentUserName => _currentUserName;
+//   int? get selectedChildID => _selectedChildID;
+//   Map<String, dynamic>? get currentChild => _currentChild;
+//   List<Map<String, dynamic>> get children => _children;
+//
+//   // !! --- (الإضافة الجديدة هنا) --- !!
+//   int? get currentStoryID => _currentStoryID;
+//   String? get currentStoryTitle => _currentStoryTitle;
+//   // !! -------------------------- !!
+//
+//
+//   void setUser(int userID, String userName) {
+//     _currentUserID = userID;
+//     _currentUserName = userName;
+//     notifyListeners();
+//   }
+//
+//   void setSelectedChild(int childID, Map<String, dynamic> child) {
+//     _selectedChildID = childID;
+//     _currentChild = child;
+//     notifyListeners();
+//   }
+//
+//   // !! --- (دالة جديدة هنا) --- !!
+//   void setCurrentStory(int storyID, String title) {
+//     _currentStoryID = storyID;
+//     _currentStoryTitle = title;
+//     notifyListeners();
+//   }
+//   // !! ----------------------- !!
+//
+//   void setChildren(List<Map<String, dynamic>> children) {
+//     _children = children;
+//     notifyListeners();
+//   }
+//
+//   void addChild(Map<String, dynamic> child) {
+//     _children.add(child);
+//     notifyListeners();
+//   }
+//
+//   void updateChild(int childID, Map<String, dynamic> updatedChild) {
+//     final index = _children.indexWhere((child) => child['childID'] == childID);
+//     if (index != -1) {
+//       _children[index] = updatedChild;
+//       if (_selectedChildID == childID) {
+//         _currentChild = updatedChild;
+//       }
+//       notifyListeners();
+//     }
+//   }
+//
+//   void removeChild(int childID) {
+//     _children.removeWhere((child) => child['childID'] == childID);
+//     if (_selectedChildID == childID) {
+//       _selectedChildID = null;
+//       _currentChild = null;
+//     }
+//     notifyListeners();
+//   }
+//
+//   void clearSelectedChild() {
+//     _selectedChildID = null;
+//     _currentChild = null;
+//     notifyListeners();
+//   }
+//
+//   void logout() {
+//     _currentUserID = null;
+//     _currentUserName = null;
+//     _selectedChildID = null;
+//     _currentChild = null;
+//     _children = [];
+//
+//     // !! --- (تحديث دالة الخروج) --- !!
+//     _currentStoryID = null;
+//     _currentStoryTitle = null;
+//     // !! ---------------------------- !!
+//     notifyListeners();
+//   }
+// }
 import 'package:flutter/foundation.dart';
 
 class AppState with ChangeNotifier {
@@ -72,11 +250,23 @@ class AppState with ChangeNotifier {
   Map<String, dynamic>? _currentChild;
   List<Map<String, dynamic>> _children = [];
 
+  // !! --- (الإضافة الجديدة هنا) --- !!
+  int? _currentStoryID;
+  String? _currentStoryTitle;
+  // !! -------------------------- !!
+
+
   int? get currentUserID => _currentUserID;
   String? get currentUserName => _currentUserName;
   int? get selectedChildID => _selectedChildID;
   Map<String, dynamic>? get currentChild => _currentChild;
   List<Map<String, dynamic>> get children => _children;
+
+  // !! --- (الإضافة الجديدة هنا) --- !!
+  int? get currentStoryID => _currentStoryID;
+  String? get currentStoryTitle => _currentStoryTitle;
+  // !! -------------------------- !!
+
 
   void setUser(int userID, String userName) {
     _currentUserID = userID;
@@ -89,6 +279,14 @@ class AppState with ChangeNotifier {
     _currentChild = child;
     notifyListeners();
   }
+
+  // !! --- (دالة جديدة هنا) --- !!
+  void setCurrentStory(int storyID, String title) {
+    _currentStoryID = storyID;
+    _currentStoryTitle = title;
+    notifyListeners();
+  }
+  // !! ----------------------- !!
 
   void setChildren(List<Map<String, dynamic>> children) {
     _children = children;
@@ -104,28 +302,19 @@ class AppState with ChangeNotifier {
     final index = _children.indexWhere((child) => child['childID'] == childID);
     if (index != -1) {
       _children[index] = updatedChild;
-
-      // (1) --- إضافة مهمة ---
-      // (إذا كان الطفل المعدل هو الطفل المختار حالياً، قم بتحديث بياناته)
       if (_selectedChildID == childID) {
         _currentChild = updatedChild;
       }
-      // --------------------
-
       notifyListeners();
     }
   }
 
   void removeChild(int childID) {
     _children.removeWhere((child) => child['childID'] == childID);
-
-    // (2) --- إضافة مهمة ---
-    // (إذا تم حذف الطفل المختار، قم بإلغاء اختياره)
     if (_selectedChildID == childID) {
       _selectedChildID = null;
       _currentChild = null;
     }
-    // --------------------
     notifyListeners();
   }
 
@@ -141,6 +330,11 @@ class AppState with ChangeNotifier {
     _selectedChildID = null;
     _currentChild = null;
     _children = [];
+
+    // !! --- (تحديث دالة الخروج) --- !!
+    _currentStoryID = null;
+    _currentStoryTitle = null;
+    // !! ---------------------------- !!
     notifyListeners();
   }
 }
