@@ -47,6 +47,8 @@
 #     conn.commit()
 #     conn.close()
 
+
+
 import sqlite3
 
 DB_NAME = "cubie.db"
@@ -100,3 +102,18 @@ def init_db():
 if __name__ == "__main__":
     init_db()
     print("Database initialized.")
+    
+    # (أضف هذا الكود في نهاية ملف backend/db.py)
+
+def get_user_id_for_story(conn, story_id):
+    """
+    (جديد) يجيب الـ userID المرتبط بالقصة
+    """
+    try:
+        c = conn.cursor()
+        c.execute("SELECT userID FROM stories WHERE storyID=?", (story_id,))
+        row = c.fetchone()
+        return row[0] if row else None
+    except Exception as e:
+        print(f"Error getting userID for story: {e}")
+        return None
