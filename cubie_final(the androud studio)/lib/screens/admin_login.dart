@@ -29,12 +29,17 @@ class _AdminLoginScreenState extends State<AdminLoginScreen> {
 
     try {
       print('🔄 محاولة تسجيل الدخول...');
-      final response = await AuthService.login(_email.text, _pass.text);
+      final loginResponse = await AuthService.login(_email.text, _pass.text);
+
 
       final appState = Provider.of<AppState>(context, listen: false);
-      appState.setUser(response['userID'], response['name']);
+      appState.setUser(
+          loginResponse['userID'],
+          loginResponse['name'],
+          loginResponse['email'] ?? _email.text // استخدام الايميل الراجع أو المدخل
+      );
 
-      print('✅ تسجيل الدخول ناجح: ${response['userID']}');
+      print('✅ تسجيل الدخول ناجح: ${loginResponse['userID']}');
 
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('✅ تم تسجيل الدخول بنجاح')),

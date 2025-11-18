@@ -1,53 +1,33 @@
-
 import 'api_service.dart';
 
 class ChildrenService {
   static Future<Map<String, dynamic>> getChildren(int userID) async {
-    // GET requests remain the same
+    // GET لا يحتاج فورم داتا
     return await ApiService.getRequest('/children/list/$userID');
   }
 
-  static Future<Map<String, dynamic>> addChild(
-      int userID, String name, int age, String gender, String grade
-      ) async {
-
-    // !! --- (التعديل هنا) --- !!
-    // (استخدام postFormRequest بدلاً من postRequest)
+  static Future<Map<String, dynamic>> addChild(int userID, String name, int age, String gender, String grade) async {
+    // نستخدم postFormRequest ونحول كل شيء لنصوص
     return await ApiService.postFormRequest('/children/add/', {
       'userID': userID.toString(),
       'name': name,
       'age': age.toString(),
-      'gender': gender == 'ذكر' ? 'Male' : 'Female',
+      'gender': gender, // تأكد أن القيمة هنا 'Male' أو 'Female'
       'grade': grade,
     });
-    // !! --- (نهاية التعديل) --- !!
   }
 
-  static Future<Map<String, dynamic>> editChild(
-      int childID, String name, int age, String gender, String grade
-      ) async {
-
-    // !! --- (التعديل هنا) --- !!
-    // (استخدام postFormRequest بدلاً من putRequest لأن الباك اند يتوقع فورم)
-    // (ملاحظة: الباك اند عندك غالباً يستخدم POST للـ edit وليس PUT)
-    return await ApiService.postFormRequest('/children/edit/$childID', {
+  static Future<Map<String, dynamic>> editChild(int childID, String name, int age, String gender, String grade) async {
+    // نستخدم putFormRequest
+    return await ApiService.putFormRequest('/children/edit/$childID', {
       'name': name,
       'age': age.toString(),
-      'gender': gender == 'ذكر' ? 'Male' : 'Female',
+      'gender': gender,
       'grade': grade,
     });
-    // !! --- (نهاية التعديل) --- !!
   }
 
   static Future<Map<String, dynamic>> deleteChild(int childID) async {
-    // !! --- (التعديل هنا) --- !!
-    // (استخدام postFormRequest بدلاً من postRequest)
-    return await ApiService.postFormRequest('/children/delete/$childID', {});
-    // !! --- (نهاية التعديل) --- !!
-  }
-
-  static Future<Map<String, dynamic>> selectChild(int childID, int userID) async {
-    // GET requests remain the same
-    return await ApiService.getRequest('/children/select/$childID?userID=$userID');
+    return await ApiService.postRequest('/children/delete/$childID', {});
   }
 }

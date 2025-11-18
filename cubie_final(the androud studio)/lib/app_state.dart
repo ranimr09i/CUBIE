@@ -1,34 +1,33 @@
-
 import 'package:flutter/foundation.dart';
 
 class AppState with ChangeNotifier {
   int? _currentUserID;
   String? _currentUserName;
+  String? _currentUserEmail; // (1) إضافة متغير الإيميل
+
   int? _selectedChildID;
   Map<String, dynamic>? _currentChild;
   List<Map<String, dynamic>> _children = [];
 
-  // !! --- (الإضافة الجديدة هنا) --- !!
   int? _currentStoryID;
   String? _currentStoryTitle;
-  // !! -------------------------- !!
-
 
   int? get currentUserID => _currentUserID;
   String? get currentUserName => _currentUserName;
+  String? get currentUserEmail => _currentUserEmail; // (2) Getter للإيميل
+
   int? get selectedChildID => _selectedChildID;
   Map<String, dynamic>? get currentChild => _currentChild;
   List<Map<String, dynamic>> get children => _children;
 
-  // !! --- (الإضافة الجديدة هنا) --- !!
   int? get currentStoryID => _currentStoryID;
   String? get currentStoryTitle => _currentStoryTitle;
-  // !! -------------------------- !!
 
-
-  void setUser(int userID, String userName) {
+  // (3) تحديث دالة setUser لتستقبل الإيميل
+  void setUser(int userID, String userName, String userEmail) {
     _currentUserID = userID;
     _currentUserName = userName;
+    _currentUserEmail = userEmail; // حفظ الإيميل
     notifyListeners();
   }
 
@@ -38,13 +37,11 @@ class AppState with ChangeNotifier {
     notifyListeners();
   }
 
-  // !! --- (دالة جديدة هنا) --- !!
   void setCurrentStory(int storyID, String title) {
     _currentStoryID = storyID;
     _currentStoryTitle = title;
     notifyListeners();
   }
-  // !! ----------------------- !!
 
   void setChildren(List<Map<String, dynamic>> children) {
     _children = children;
@@ -85,14 +82,12 @@ class AppState with ChangeNotifier {
   void logout() {
     _currentUserID = null;
     _currentUserName = null;
+    _currentUserEmail = null; // تصفير الإيميل
     _selectedChildID = null;
     _currentChild = null;
     _children = [];
-
-    // !! --- (تحديث دالة الخروج) --- !!
     _currentStoryID = null;
     _currentStoryTitle = null;
-    // !! ---------------------------- !!
     notifyListeners();
   }
 }

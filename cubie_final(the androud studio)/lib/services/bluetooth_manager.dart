@@ -1,4 +1,4 @@
-// lib/services/bluetooth_manager.dart
+
 import 'dart:async';
 import 'dart:convert'; // لإرسال الأوامر كـ bytes
 import 'package:flutter/material.dart';

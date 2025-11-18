@@ -20,7 +20,10 @@ class _EditChildrenPageState extends State<EditChildrenPage> {
   @override
   void initState() {
     super.initState();
-    _loadChildren();
+    // تحميل البيانات عند فتح الصفحة
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _loadChildren();
+    });
   }
 
   Future<void> _loadChildren() async {
@@ -33,45 +36,49 @@ class _EditChildrenPageState extends State<EditChildrenPage> {
     }
 
     try {
+      // استدعاء الخدمة لجلب القائمة
       final response = await ChildrenService.getChildren(userID);
 
       List<Map<String, dynamic>> childrenList = [];
 
       if (response['children'] != null) {
         for (var child in response['children']) {
-          final childMap = <String, dynamic>{};
-          child.forEach((key, value) {
-            childMap[key.toString()] = value;
-          });
+          // تحويل البيانات إلى Map لضمان التوافق
+          final childMap = <String, dynamic>{
+            'childID': child['childID'],
+            'name': child['name'],
+            'age': child['age'],
+            'gender': child['gender'],
+            'grade': child['grade'] ?? 'KG', // (مهم جداً) قراءة القريد أو وضع افتراضي
+          };
           childrenList.add(childMap);
         }
       }
 
+      // تحديث الحالة العامة للتطبيق
       appState.setChildren(childrenList);
 
-      setState(() => _isLoading = false);
     } catch (e) {
-      setState(() => _isLoading = false);
+      print('❌ فشل تحميل الأطفال: $e');
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('فشل تحميل الأطفال: $e')),
+        SnackBar(content: Text('فشل تحميل القائمة: $e')),
       );
+    } finally {
+      if (mounted) {
+        setState(() => _isLoading = false);
+      }
     }
   }
 
-  Future<void> _refreshChildren() async {
-    await _loadChildren();
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(content: Text('✅ تم تحديث قائمة الأطفال')),
-    );
-  }
-
   Future<void> _navigateToEditChild(Map<String, dynamic> child) async {
+    print('Navigating to edit child with data: $child'); // للتأكد من البيانات
     final result = await Navigator.pushNamed(
       context,
       Routes.editChild,
-      arguments: child,
+      arguments: child, // تمرير بيانات الطفل كاملة (بما فيها القريد)
     );
 
+    // إذا رجعنا وتم التعديل، نعيد تحميل القائمة
     if (result == true) {
       await _loadChildren();
     }
@@ -83,23 +90,32 @@ class _EditChildrenPageState extends State<EditChildrenPage> {
     final children = appState.children;
 
     return AppScaffold(
-      title: 'تحرير الأطفال',
-      showLogo: true,
-      centerTitle: false,
+      title: 'إدارة الأطفال',
       body: Column(
         children: [
+          // بطاقة إحصائية بسيطة
           Padding(
             padding: const EdgeInsets.all(12.0),
             child: Card(
-              color: const Color(0xff4ab0d1),
+              elevation: 2,
+              color: Colors.white,
               child: Padding(
-                padding: const EdgeInsets.all(16.0),
+                padding: const EdgeInsets.symmetric(horizontal: 16.0, vertical: 12.0),
                 child: Row(
                   mainAxisAlignment: MainAxisAlignment.spaceBetween,
                   children: [
-                    const Text('عدد الأطفال:', style: TextStyle(color: Colors.white)),
-                    Text('${children.length}',
-                        style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
+                    const Text(
+                      'عدد الأطفال المسجلين:',
+                      style: TextStyle(fontSize: 16, color: Color(0xff254865)),
+                    ),
+                    CircleAvatar(
+                      radius: 15,
+                      backgroundColor: const Color(0xff4ab0d1),
+                      child: Text(
+                        '${children.length}',
+                        style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold),
+                      ),
+                    ),
                   ],
                 ),
               ),
@@ -110,7 +126,7 @@ class _EditChildrenPageState extends State<EditChildrenPage> {
             child: _isLoading
                 ? const Center(child: CircularProgressIndicator())
                 : RefreshIndicator(
-              onRefresh: _refreshChildren,
+              onRefresh: _loadChildren,
               child: children.isEmpty
                   ? const Center(
                 child: Column(
@@ -118,46 +134,52 @@ class _EditChildrenPageState extends State<EditChildrenPage> {
                   children: [
                     Icon(Icons.child_care, size: 64, color: Colors.grey),
                     SizedBox(height: 16),
-                    Text('لا يوجد أطفال', style: TextStyle(fontSize: 18, color: Colors.grey)),
-                    Text('أضف طفلاً جديداً', style: TextStyle(color: Colors.grey)),
+                    Text('لا يوجد أطفال مسجلين',
+                        style: TextStyle(fontSize: 18, color: Colors.grey)),
                   ],
                 ),
               )
                   : ListView.builder(
+                padding: const EdgeInsets.symmetric(horizontal: 12),
                 itemCount: children.length,
-                itemBuilder: (c, i) {
+                itemBuilder: (ctx, i) {
                   final child = children[i];
                   return ChildTile(
                     name: child['name']?.toString() ?? 'بدون اسم',
                     age: child['age'],
                     gender: child['gender'],
-                    grade: child['grade']?.toString(), // (1) تمرير القريد هنا
-                    onTap: () {},
-                    onEdit: () => _navigateToEditChild(child),
+                    grade: child['grade']?.toString(), // عرض القريد
+                    onTap: () {}, // لا شيء عند الضغط العادي
+                    onEdit: () => _navigateToEditChild(child), // التعديل عند الضغط على زر التعديل
                   );
                 },
               ),
             ),
           ),
 
+          // زر الإضافة العائم في الأسفل
           Padding(
-            padding: const EdgeInsets.all(12.0),
-            child: ElevatedButton.icon(
-              onPressed: () async {
-                final result = await Navigator.pushNamed(context, Routes.addChild);
-                if (result == true) {
-                  await _loadChildren();
-                }
-              },
-              icon: const Icon(Icons.add),
-              label: const Text('إضافة طفل'),
-              style: ElevatedButton.styleFrom(
-                backgroundColor: const Color(0xff4ab0d1),
-                foregroundColor: const Color(0xff254865),
-                minimumSize: const Size(double.infinity, 50),
+            padding: const EdgeInsets.all(16.0),
+            child: SizedBox(
+              width: double.infinity,
+              child: ElevatedButton.icon(
+                onPressed: () async {
+                  final result = await Navigator.pushNamed(context, Routes.addChild);
+                  if (result == true) {
+                    await _loadChildren();
+                  }
+                },
+                icon: const Icon(Icons.add_circle_outline),
+                label: const Text('إضافة طفل جديد'),
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: const Color(0xff4ab0d1),
+                  foregroundColor: const Color(0xff254865),
+                  padding: const EdgeInsets.symmetric(vertical: 16),
+                  textStyle: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+                ),
               ),
             ),
-          )
+          ),
         ],
       ),
     );
