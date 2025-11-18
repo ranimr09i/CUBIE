@@ -463,7 +463,7 @@ from fastapi.staticfiles import StaticFiles
 
 chat_router = APIRouter()
 client = OpenAI(
-    api_key="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"
+    api_key=""
 )
 
 # تتبع الأدوار
