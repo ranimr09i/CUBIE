@@ -1118,6 +1118,15 @@
 #         "required_move": question_mode
 #     }
 
+
+
+
+
+
+
+
+
+
 import os
 import re
 from fastapi import APIRouter, HTTPException, Form, Request
@@ -1129,7 +1138,7 @@ from audio import generate_audio
 chat_router = APIRouter()
 
 # يفضل دائماً استخدام متغيرات البيئة للمفاتيح السرية، لكن أبقيتها كما طلبت لعدم تخريب الكود
-client = OpenAI(api_key="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")
+client = OpenAI(api_key="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")
 
 # تخزين بيانات الأدوار للقصص النشطة
 story_turns = {}
@@ -1299,13 +1308,18 @@ def start_story(
     
     system_prompt = (
         "أنت 'كيوبي'، راوي قصص تفاعلية للأطفال. أسلوبك مشوق وبسيط."
-        "قواعد صارمة:\n"
-        "1. التزم بطول النص المحدد بدقة لكل دور.\n"
-        "2. في نهاية كل رد، اطلب من الطفل حركة بالمكعب حصراً.\n"
-        "3. الحركات المسموحة: [TILTZ] (يمين/يسار)، [TILTY] (أمام/خلف)، [SHAKE] (هز).\n"
-        "4. اذكر الحركة المطلوبة بوضوح في السؤال الأخير.\n"
-        "5. ضع التاق المناسب في نهاية النص تماماً."
+        "قوانين صارمة جداً للاستجابة:\n"
+        "1. اسرد القصة بالعربية الفصحى السهلة واستخدم اسم الطفل دائماً.\n"
+        "2. في نهاية كل رد، اطلب من الطفل *حصراً* تحريك المكعب للمتابعة.\n"
+        "3. الممنوعات: لا تطلب من الطفل القفز، الركض، أو التصفيق. التفاعل يكون بالمكعب فقط.\n"
+        "4. أنواع التفاعل المسموحة:\n"
+        "   - للاختيار بين شيئين (مثل طريقين): اطلب إمالة المكعب (يمين/يسار) واستخدم [TILTZ].\n"
+        "   - للتقدم/التراجع أو الهجوم/الدفاع: اطلب إمالة المكعب (أمام/خلف) واستخدم [TILTY].\n"
+        "   - للأكشن والطاقة: اطلب هز المكعب واستخدم [SHAKE].\n"
+        "5. يجب أن تذكر الحركة المطلوبة بوضوح في النص (مثلاً: 'أمل المكعب للأمام أو الخلف').\n"
+        "6. اختم الرد فوراً بالتاق المناسب."
     )
+    
     
     user_task_prompt = (
         f"معلومات الطفل: {child_info}\n"
@@ -1438,7 +1452,7 @@ def continue_story(
     response = client.chat.completions.create(
         model="gpt-4o-mini",
         messages=messages,
-        temperature=0.7
+        temperature=0.2
     )
     
     full_response_text = response.choices[0].message.content
