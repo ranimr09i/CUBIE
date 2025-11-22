@@ -112,9 +112,17 @@ class _HomePageState extends State<HomePage> {
     _handleChildUpdates();
 
     return AppScaffold(
+
       title: 'الصفحة الرئيسية',
-      showLogo: true,
+      showLogo: false,
       actions: [
+      Image.asset(
+      'assets/logo2.png',
+      height: 45,
+      width: 45,
+      errorBuilder: (context, error, stackTrace) =>
+      const Icon(Icons.account_circle),
+    ),
         IconButton(
           onPressed: () => Navigator.pushNamed(context, Routes.settings),
           icon: const Icon(Icons.settings, color: Color(0xff8dd6bb)),
@@ -229,6 +237,7 @@ class _HomePageState extends State<HomePage> {
                   Expanded(
                     child: ElevatedButton.icon(
                       onPressed: () => Navigator.pushNamed(context, Routes.connectCube),
+
                       icon: const Icon(Icons.bluetooth, color: Color(0xff254865)),
                       label: const Text('اتصل بالمكعب',
                           style: TextStyle(color: Color(0xff254865))),

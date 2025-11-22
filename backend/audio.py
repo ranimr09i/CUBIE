@@ -59,7 +59,7 @@ os.makedirs(AUDIO_FOLDER, exist_ok=True)
 # يفضل وضع المفتاح في متغيرات البيئة، أو يمكنك وضعه هنا مؤقتاً
 # client = OpenAI(api_key="YOUR_OPENAI_API_KEY") 
 # بما أنك تستخدمه في chat.py، سنفترض أن الكلاس OpenAI سيأخذ المفتاح من البيئة أو يمكنك تمريره هنا
-client = OpenAI(api_key="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") 
+client = OpenAI(api_key="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")
 
 def generate_audio(text: str, userID: int, storyID: int, turn: int):
     """

@@ -28,7 +28,7 @@ class CubieUIApp extends StatelessWidget {
       debugShowCheckedModeBanner: false,
       theme: ThemeData(
         primaryColor: const Color(0xff254865),
-        scaffoldBackgroundColor: const Color(0xffe6eceb),
+        scaffoldBackgroundColor: const Color(0xffe6ebea),
         appBarTheme: const AppBarTheme(
           backgroundColor: Color(0xff224562),
           foregroundColor: Colors.white,
@@ -53,5 +53,6 @@ class CubieUIApp extends StatelessWidget {
       initialRoute: Routes.adminLogin,
       routes: Routes.getRoutes(),
     );
+
   }
 }
