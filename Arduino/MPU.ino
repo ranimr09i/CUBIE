@@ -2372,16 +2372,548 @@
 // }
 
 
+// #include <Wire.h>
+// #include <MPU6050.h>
+// #include <WiFi.h>
+
+// // مكتبات الصوت
+// #include "AudioFileSourceHTTPStream.h" 
+// #include "AudioFileSourceBuffer.h"     
+// #include "AudioGeneratorMP3.h"         
+// #include "AudioOutputI2S.h"
+
+// #include <BLEDevice.h>
+// #include <BLEServer.h>
+// #include <BLEUtils.h>
+// #include <BLE2902.h>
+
+// // ===================================
+// // !!      إعدادات الواي فاي      !!
+// // ===================================
+// const char* ssid = "Salman_4G"; 
+// const char* password = "0566339996"; 
+
+// // ===================================
+// // !!      إعدادات الهاردوير      !!
+// // ===================================
+// #define SHUTDOWN_PIN 4 
+// #define I2S_DOUT 25
+// #define I2S_BCLK 26
+// #define I2S_LRC  27
+
+// // إعدادات حساس الحركة
+// MPU6050 mpu(0x68);
+// const float LIMIT_DEG = 20.0;
+// const float SHAKE_LIMIT_G = 0.7;
+// const float ACCEL_SCALE = 16384.0;
+// int16_t accelX, accelY, accelZ, gyroX, gyroY, gyroZ;
+
+// // كائنات الصوت
+// AudioGeneratorMP3 *mp3 = NULL;
+// AudioFileSourceHTTPStream *file_http = NULL;
+// AudioFileSourceBuffer *buff = NULL;
+// AudioOutputI2S *out = NULL;
+
+// // متغيرات النظام
+// bool isQuestionActive = false;
+// String mode = "";
+// String answer = "";
+// bool hasNewCommand = false;
+// String pendingCommand = "";
+
+// // إعدادات البلوتوث
+// BLEServer *pServer = NULL;
+// BLEService *pService = NULL;
+// BLECharacteristic *pCommandCharacteristic = NULL;
+// BLECharacteristic *pResponseCharacteristic = NULL;
+// bool deviceConnected = false;
+
+// #define SERVICE_UUID        "4fafc201-1fb5-459e-8fcc-c5c9c331914b"
+// #define COMMAND_CHAR_UUID   "beb5483e-36e1-4688-b7f5-ea07361b26a8"
+// #define RESPONSE_CHAR_UUID  "c3856242-4f7f-4a6c-b3d4-4a6e43f5a25c"
+
+// // ===================================
+// // إرسال رسالة BLE (تعريف مبكر)
+// // ===================================
+// void sendBleResponse(String message) {
+//   if (deviceConnected && pResponseCharacteristic) {
+//     pResponseCharacteristic->setValue(message.c_str());
+//     pResponseCharacteristic->notify();
+//     Serial.print("  → BLE: "); Serial.println(message);
+//   }
+// }
+
+// // ===================================
+// // دالة إيقاف الصوت
+// // ===================================
+// void stopAudio() {
+//   Serial.println("→ Stopping audio...");
+  
+//   digitalWrite(SHUTDOWN_PIN, LOW);
+//   delay(100);
+  
+//   if (mp3) { 
+//     if (mp3->isRunning()) mp3->stop(); 
+//     delete mp3; 
+//     mp3 = NULL; 
+//   }
+//   if (buff) { 
+//     buff->close(); 
+//     delete buff; 
+//     buff = NULL; 
+//   }
+//   if (file_http) { 
+//     file_http->close(); 
+//     delete file_http; 
+//     file_http = NULL; 
+//   }
+//   if (out) { 
+//     out->stop();
+//     delete out; 
+//     out = NULL; 
+//   }
+  
+//   delay(200);
+  
+//   // إعادة تفعيل BLE
+//   BLEDevice::startAdvertising();
+  
+//   Serial.printf("✓ Memory freed: %d bytes\n\n", ESP.getFreeHeap());
+// }
+
+// // ===================================
+// // الحل النهائي - تشغيل MP3 من URL
+// // ===================================
+// void playMP3FromURL(const char* url) {
+//   stopAudio();
+//   delay(300);
+  
+//   Serial.println("╔════════════════════════════════════╗");
+//   Serial.println("║      Playing MP3 from URL          ║");
+//   Serial.println("╚════════════════════════════════════╝");
+//   Serial.printf("Initial RAM: %d bytes\n", ESP.getFreeHeap());
+//   Serial.print("URL: "); Serial.println(url);
+//   Serial.println();
+  
+//   // !! تحرير ذاكرة مؤقتة - إيقاف BLE أثناء التشغيل !!
+//   if (deviceConnected) {
+//     Serial.println("→ Pausing BLE to free memory...");
+//     BLEDevice::stopAdvertising();
+//     delay(100);
+//   }
+
+//   // === الخطوة 1: HTTP Stream ===
+//   Serial.println("→ Creating HTTP stream...");
+//   file_http = new AudioFileSourceHTTPStream(url);
+//   if (!file_http) {
+//     Serial.println("✗ Failed - Out of memory");
+//     sendBleResponse("ERROR:NO_MEMORY");
+//     BLEDevice::startAdvertising();
+//     return;
+//   }
+
+//   // الاتصال بالسيرفر
+//   Serial.print("→ Connecting");
+//   int timeout = 0;
+//   while (!file_http->isOpen() && timeout < 40) { 
+//     delay(200); 
+//     timeout++; 
+//     Serial.print("."); 
+//   }
+//   Serial.println();
+  
+//   if (!file_http->isOpen()) {
+//     Serial.println("✗ Connection timeout!");
+//     Serial.println("  Check: WiFi, URL, or server status");
+//     stopAudio();
+//     sendBleResponse("ERROR:CONNECTION_FAILED");
+//     BLEDevice::startAdvertising();
+//     return;
+//   }
+//   Serial.println("✓ Connected to server!");
+//   Serial.printf("  RAM after connection: %d bytes\n", ESP.getFreeHeap());
+
+//   // === الخطوة 2: Buffer ===
+//   // استخدام buffer أصغر لتوفير ذاكرة كافية لـ I2S DMA
+//   Serial.println("→ Creating buffer (4KB)...");
+//   buff = new AudioFileSourceBuffer(file_http, 4096); // 4KB buffer - كافٍ ومقتصد
+//   if (!buff) {
+//     Serial.println("✗ Buffer creation failed");
+//     stopAudio();
+//     sendBleResponse("ERROR:BUFFER_FAILED");
+//     return;
+//   }
+  
+//   // ملء البفر مسبقاً
+//   Serial.print("→ Pre-buffering");
+//   for(int i = 0; i < 8; i++) {
+//     delay(50);
+//     Serial.print(".");
+//   }
+//   Serial.println(" Done!");
+//   Serial.printf("  RAM after buffer: %d bytes\n", ESP.getFreeHeap());
+  
+//   // تأكد من وجود ذاكرة كافية
+//   if (ESP.getFreeHeap() < 30000) {
+//     Serial.println("✗ Not enough RAM for I2S DMA!");
+//     Serial.println("  Need at least 30KB free");
+//     stopAudio();
+//     sendBleResponse("ERROR:LOW_MEMORY");
+//     return;
+//   }
+
+//   // === الخطوة 3: I2S Output ===
+//   Serial.println("→ Configuring I2S...");
+  
+//   // !! تقليل DMA buffers لتوفير الذاكرة !!
+//   out = new AudioOutputI2S(0, 0); // استخدام internal DAC بدلاً من external
+//   if (!out) {
+//     Serial.println("✗ I2S creation failed");
+//     stopAudio();
+//     sendBleResponse("ERROR:I2S_FAILED");
+//     return;
+//   }
+  
+//   // الإعداد الصحيح
+//   out->SetPinout(I2S_BCLK, I2S_LRC, I2S_DOUT);
+//   out->SetOutputModeMono(false);  // Stereo
+//   out->SetGain(0.7);              // حجم معتدل
+  
+//   // *** تم حذف SetBufferSize لحل مشكلة الـ Compilation ***
+  
+//   Serial.println("✓ I2S configured");
+//   Serial.printf("  RAM before begin: %d bytes\n", ESP.getFreeHeap());
+
+//   // === الخطوة 4: MP3 Decoder ===
+//   Serial.println("→ Creating MP3 decoder...");
+//   mp3 = new AudioGeneratorMP3();
+//   if (!mp3) {
+//     Serial.println("✗ Decoder creation failed");
+//     stopAudio();
+//     sendBleResponse("ERROR:DECODER_FAILED");
+//     return;
+//   }
+//   Serial.println("✓ Decoder ready");
+  
+//   // تشغيل المكبر
+//   digitalWrite(SHUTDOWN_PIN, HIGH);
+//   delay(200);
+//   Serial.println("✓ Amplifier ON");
+
+//   // === الخطوة 5: البدء ===
+//   Serial.println("\n→ Starting MP3 playback...");
+//   Serial.printf("  Final RAM: %d bytes\n", ESP.getFreeHeap());
+  
+//   // !! المحاولة مع معالجة أفضل !!
+//   bool started = mp3->begin(buff, out);
+  
+//   if (!started) {
+//     Serial.println("\n╔════════════════════════════════════╗");
+//     Serial.println("║  ✗✗✗ DECODE FAILED ✗✗✗             ║");
+//     Serial.println("╠════════════════════════════════════╣");
+//     Serial.println("║  Possible Solutions:               ║");
+//     Serial.println("║                                    ║");
+//     Serial.println("║  1. Tools → Partition Scheme       ║");
+//     Serial.println("║     → Huge APP (3MB)               ║");
+//     Serial.println("║                                    ║");
+//     Serial.println("║  2. Update ESP8266Audio library    ║");
+//     Serial.println("║     to version 1.9.7               ║");
+//     Serial.println("║                                    ║");
+//     Serial.println("║  3. Check MP3 file format:         ║");
+//     Serial.println("║     - Must be standard MP3         ║");
+//     Serial.println("║     - Not AAC or M4A               ║");
+//     Serial.println("║     - Sample rate: 44100Hz         ║");
+//     Serial.println("║     - Bitrate: 128kbps max         ║");
+//     Serial.println("║                                    ║");
+//     Serial.println("║  4. Test with small file first     ║");
+//     Serial.println("║                                    ║");
+//     Serial.println("╚════════════════════════════════════╝\n");
+    
+//     stopAudio();
+//     sendBleResponse("ERROR:PLAYBACK_FAILED");
+//     return;
+//   }
+  
+//   // نجح!
+//   Serial.println("\n╔════════════════════════════════════╗");
+//   Serial.println("║  ✓✓✓ SUCCESS! PLAYING! ✓✓✓         ║");
+//   Serial.println("╚════════════════════════════════════╝\n");
+//   sendBleResponse("AUDIO:PLAYING");
+// }
+
+// // ===================================
+// // تنفيذ الأوامر
+// // ===================================
+// void executeCommand(String command) {
+//   Serial.println("\n╔════════════════════════════════════╗");
+//   Serial.print("║  COMMAND: ");
+//   Serial.print(command);
+//   for(int i = command.length(); i < 24; i++) Serial.print(" ");
+//   Serial.println("║");
+//   Serial.println("╚════════════════════════════════════╝");
+  
+//   String upperCmd = command;
+//   upperCmd.toUpperCase();
+
+//   // === أوامر التشغيل ===
+//   if (upperCmd == "TEST") {
+//     Serial.println("Testing with small MP3...");
+//     playMP3FromURL("http://www.soundjay.com/button/sounds/button-09.mp3");
+//   }
+//   else if (upperCmd == "TEST2") {
+//     Serial.println("Testing with medium MP3...");
+//     playMP3FromURL("http://commondatastorage.googleapis.com/codeskulptor-demos/DDR_assets/Kangaroo_MusiQue_-_The_Neverwritten_Role_Playing_Game.mp3");
+//   }
+//   else if (upperCmd == "STOP") {
+//     stopAudio();
+//     sendBleResponse("AUDIO:STOPPED");
+//   }
+  
+//   // === تشغيل رابط مخصص ===
+//   else if (upperCmd.startsWith("PLAY:")) {
+//     String url = command.substring(5);
+//     url.trim();
+//     Serial.print("Custom URL: "); Serial.println(url);
+//     playMP3FromURL(url.c_str());
+//   }
+  
+//   // === أوامر الحساس ===
+//   else if (upperCmd.startsWith("START")) {
+//     mode = upperCmd.substring(5);
+//     mode.trim();
+//     isQuestionActive = true;
+//     answer = "";
+//     Serial.print("Sensor mode: "); Serial.println(mode);
+//     sendBleResponse("READY:" + mode);
+//   }
+  
+//   // === أوامر النظام ===
+//   else if (upperCmd == "STATUS") {
+//     Serial.println("\n=== SYSTEM STATUS ===");
+//     Serial.printf("Free RAM: %d bytes\n", ESP.getFreeHeap());
+//     Serial.printf("WiFi: %s (%s)\n", 
+//                   WiFi.status() == WL_CONNECTED ? "Connected" : "Disconnected",
+//                   WiFi.localIP().toString().c_str());
+//     Serial.printf("BLE: %s\n", deviceConnected ? "Connected" : "Disconnected");
+//     Serial.printf("Audio: %s\n", (mp3 && mp3->isRunning()) ? "Playing" : "Idle");
+//     Serial.printf("MPU6050: %s\n", mpu.testConnection() ? "OK" : "Failed");
+//     Serial.println("=====================\n");
+//     sendBleResponse("STATUS:OK");
+//   }
+//   else if (upperCmd == "REBOOT") {
+//     Serial.println("Rebooting in 2 seconds...");
+//     sendBleResponse("REBOOTING");
+//     delay(2000);
+//     ESP.restart();
+//   }
+//   else if (upperCmd == "HELP") {
+//     Serial.println("\n=== COMMANDS ===");
+//     Serial.println("TEST        - Test small MP3");
+//     Serial.println("TEST2       - Test medium MP3");
+//     Serial.println("PLAY:url    - Play from URL");
+//     Serial.println("STOP        - Stop playback");
+//     Serial.println("STARTSHAKE  - Shake detection");
+//     Serial.println("STARTTILTY  - Tilt Y detection");
+//     Serial.println("STARTTILTZ  - Tilt Z detection");
+//     Serial.println("STATUS      - System info");
+//     Serial.println("REBOOT      - Restart ESP32");
+//     Serial.println("HELP        - This list");
+//     Serial.println("================\n");
+//     sendBleResponse("HELP:OK");
+//   }
+//   else {
+//     Serial.println("Unknown command. Type HELP");
+//     sendBleResponse("ERROR:UNKNOWN");
+//   }
+// }
+
+// // ===================================
+// // كشف الحركة
+// // ===================================
+// void detectShake() {
+//   float acc_g = sqrt((float)accelX*accelX + (float)accelY*accelY + (float)accelZ*accelZ) / ACCEL_SCALE;
+//   if (fabs(acc_g - 1.0) > SHAKE_LIMIT_G) {
+//     answer = "SHAKE";
+//     sendBleResponse("GESTURE:SHAKE");
+//     isQuestionActive = false;
+//     Serial.println("→ Detected: SHAKE");
+//   }
+// }
+
+// void detectY() {
+//   float angleY = atan2(accelX, sqrt(accelY*accelY + accelZ*accelZ)) * 180.0 / PI;
+//   if (angleY > LIMIT_DEG) {
+//     answer = "FORWARD";
+//     sendBleResponse("GESTURE:FORWARD");
+//     isQuestionActive = false;
+//     Serial.println("→ Detected: FORWARD");
+//   } else if (angleY < -LIMIT_DEG) {
+//     answer = "BACK";
+//     sendBleResponse("GESTURE:BACK");
+//     isQuestionActive = false;
+//     Serial.println("→ Detected: BACK");
+//   }
+// }
+
+// void detectZ() {
+//   float angleZ = atan2(accelY, accelZ) * 180.0 / PI;
+//   if (angleZ > LIMIT_DEG) {
+//     answer = "RIGHT";
+//     sendBleResponse("GESTURE:RIGHT");
+//     isQuestionActive = false;
+//     Serial.println("→ Detected: RIGHT");
+//   } else if (angleZ < -LIMIT_DEG) {
+//     answer = "LEFT";
+//     sendBleResponse("GESTURE:LEFT");
+//     isQuestionActive = false;
+//     Serial.println("→ Detected: LEFT");
+//   }
+// }
+
+// // ===================================
+// // BLE Callbacks
+// // ===================================
+// class MyServerCallbacks: public BLEServerCallbacks {
+//     void onConnect(BLEServer* pServer) {
+//       deviceConnected = true;
+//       Serial.println("\n╔═══════════════════╗");
+//       Serial.println("║  ✓ BLE Connected  ║");
+//       Serial.println("╚═══════════════════╝\n");
+//     }
+//     void onDisconnect(BLEServer* pServer) {
+//       deviceConnected = false;
+//       Serial.println("\n✗ BLE Disconnected\n");
+//       BLEDevice::startAdvertising();
+//     }
+// };
+
+// class MyCommandCallbacks: public BLECharacteristicCallbacks {
+//     void onWrite(BLECharacteristic *pCharacteristic) {
+//       std::string value = pCharacteristic->getValue().c_str();
+//       if (value.length() > 0) {
+//         pendingCommand = String(value.c_str());
+//         pendingCommand.trim();
+//         pendingCommand.replace("\n", "");
+//         pendingCommand.replace("\r", "");
+//         hasNewCommand = true;
+//       }
+//     }
+// };
+
+// // ===================================
+// // SETUP
+// // ===================================
+// void setup() {
+//   Serial.begin(115200);
+//   delay(2000);
+  
+//   Serial.println("\n\n");
+//   Serial.println("╔════════════════════════════════════╗");
+//   Serial.println("║                                    ║");
+//   Serial.println("║      🎵 CUBIE Audio System 🎵        ║");
+//   Serial.println("║        Final Solution v5.0         ║");
+//   Serial.println("║                                    ║");
+//   Serial.println("╚════════════════════════════════════╝\n");
+  
+//   pinMode(SHUTDOWN_PIN, OUTPUT);
+//   digitalWrite(SHUTDOWN_PIN, LOW);
+  
+//   // BLE
+//   Serial.println("→ BLE...");
+//   BLEDevice::init("CUBIE");
+//   pServer = BLEDevice::createServer();
+//   pServer->setCallbacks(new MyServerCallbacks());
+//   pService = pServer->createService(SERVICE_UUID);
+  
+//   pCommandCharacteristic = pService->createCharacteristic(
+//     COMMAND_CHAR_UUID, 
+//     BLECharacteristic::PROPERTY_WRITE
+//   );
+//   pCommandCharacteristic->setCallbacks(new MyCommandCallbacks());
+  
+//   pResponseCharacteristic = pService->createCharacteristic(
+//     RESPONSE_CHAR_UUID, 
+//     BLECharacteristic::PROPERTY_NOTIFY
+//   );
+//   pResponseCharacteristic->addDescriptor(new BLE2902());
+  
+//   pService->start();
+//   BLEDevice::startAdvertising();
+//   Serial.println("  ✓ Ready\n");
+
+//   // MPU6050
+//   Serial.println("→ MPU6050...");
+//   Wire.begin(21, 22);
+//   mpu.initialize();
+//   Serial.println(mpu.testConnection() ? "  ✓ OK\n" : "  ✗ Failed\n");
+  
+//   // WiFi
+//   Serial.print("→ WiFi");
+//   WiFi.begin(ssid, password);
+//   int tries = 0;
+//   while (WiFi.status() != WL_CONNECTED && tries < 60) { 
+//     delay(500); 
+//     Serial.print("."); 
+//     tries++;
+//   }
+//   Serial.println();
+  
+//   if (WiFi.status() == WL_CONNECTED) {
+//     Serial.println("  ✓ Connected");
+//     Serial.print("  IP: "); Serial.println(WiFi.localIP());
+//   } else {
+//     Serial.println("  ✗ Failed!");
+//   }
+  
+//   Serial.println("\n╔════════════════════════════════════╗");
+//   Serial.println("║        ✓ SYSTEM READY! ✓           ║");
+//   Serial.println("╚════════════════════════════════════╝");
+//   Serial.printf("\nFree RAM: %d bytes\n", ESP.getFreeHeap());
+//   Serial.println("\n📌 IMPORTANT:");
+//   Serial.println("   If audio fails, set:");
+//   Serial.println("   Tools → Partition Scheme");
+//   Serial.println("   → Huge APP (3MB No OTA)\n");
+//   Serial.println("Commands: TEST, PLAY:url, STOP, HELP\n");
+//   Serial.println("════════════════════════════════════\n");
+// }
+
+// // ===================================
+// // LOOP
+// // ===================================
+// void loop() {
+//   if (hasNewCommand) {
+//     executeCommand(pendingCommand);
+//     hasNewCommand = false;
+//     pendingCommand = "";
+//   }
+
+//   if (mp3 && mp3->isRunning()) {
+//     if (!mp3->loop()) {
+//       Serial.println("\n♪ Audio finished\n");
+//       stopAudio();
+//       sendBleResponse("AUDIO:FINISHED");
+//     }
+//   }
+
+//   if (isQuestionActive && answer == "") {
+//     mpu.getMotion6(&accelX, &accelY, &accelZ, &gyroX, &gyroY, &gyroZ);
+//     if (mode == "SHAKE") detectShake();
+//     else if (mode == "TILTY") detectY();
+//     else if (mode == "TILTZ") detectZ();
+//   }
+  
+//   delay(1); 
+// }
+
 #include <Wire.h>
 #include <MPU6050.h>
 #include <WiFi.h>
-
-// مكتبات الصوت
+#include "esp_bt_main.h"
+#include "esp_bt_device.h"
 #include "AudioFileSourceHTTPStream.h" 
 #include "AudioFileSourceBuffer.h"     
 #include "AudioGeneratorMP3.h"         
 #include "AudioOutputI2S.h"
-
 #include <BLEDevice.h>
 #include <BLEServer.h>
 #include <BLEUtils.h>
@@ -2401,7 +2933,6 @@ const char* password = "0566339996";
 #define I2S_BCLK 26
 #define I2S_LRC  27
 
-// إعدادات حساس الحركة
 MPU6050 mpu(0x68);
 const float LIMIT_DEG = 20.0;
 const float SHAKE_LIMIT_G = 0.7;
@@ -2414,7 +2945,6 @@ AudioFileSourceHTTPStream *file_http = NULL;
 AudioFileSourceBuffer *buff = NULL;
 AudioOutputI2S *out = NULL;
 
-// متغيرات النظام
 bool isQuestionActive = false;
 String mode = "";
 String answer = "";
@@ -2433,7 +2963,7 @@ bool deviceConnected = false;
 #define RESPONSE_CHAR_UUID  "c3856242-4f7f-4a6c-b3d4-4a6e43f5a25c"
 
 // ===================================
-// إرسال رسالة BLE (تعريف مبكر)
+// إرسال رسالة BLE
 // ===================================
 void sendBleResponse(String message) {
   if (deviceConnected && pResponseCharacteristic) {
@@ -2444,200 +2974,90 @@ void sendBleResponse(String message) {
 }
 
 // ===================================
-// دالة إيقاف الصوت
+// دالة إيقاف الصوت المحسّنة
 // ===================================
 void stopAudio() {
-  Serial.println("→ Stopping audio...");
+  Serial.println("→ Stopping audio safely...");
   
-  digitalWrite(SHUTDOWN_PIN, LOW);
+  // !! الترتيب مهم جداً !!
+  // 1. إيقاف التشغيل أولاً
+  if (mp3 && mp3->isRunning()) {
+    mp3->stop();
+  }
+  
+  // 2. الانتظار قليلاً للتأكد من توقف كل العمليات
   delay(100);
   
-  if (mp3) { 
-    if (mp3->isRunning()) mp3->stop(); 
-    delete mp3; 
-    mp3 = NULL; 
-  }
-  if (buff) { 
-    buff->close(); 
-    delete buff; 
-    buff = NULL; 
-  }
-  if (file_http) { 
-    file_http->close(); 
-    delete file_http; 
-    file_http = NULL; 
-  }
-  if (out) { 
-    out->stop();
-    delete out; 
-    out = NULL; 
-  }
+  // 3. حذف الكائنات بالترتيب الصحيح
+  if (mp3) { delete mp3; mp3 = NULL; }
+  if (buff) { buff->close(); delete buff; buff = NULL; }
+  if (file_http) { file_http->close(); delete file_http; file_http = NULL; }
+  if (out) { out->stop(); delete out; out = NULL; }
   
+  // 4. إطفاء المكبر
+  digitalWrite(SHUTDOWN_PIN, LOW);
+  
+  // 5. تنظيف إضافي للذاكرة
   delay(200);
   
-  // إعادة تفعيل BLE
-  BLEDevice::startAdvertising();
-  
-  Serial.printf("✓ Memory freed: %d bytes\n\n", ESP.getFreeHeap());
+  Serial.printf("✓ RAM: %d bytes free\n", ESP.getFreeHeap());
 }
 
 // ===================================
-// الحل النهائي - تشغيل MP3 من URL
+// !! الحل الجذري - Progressive Streaming !!
 // ===================================
 void playMP3FromURL(const char* url) {
   stopAudio();
-  delay(300);
+  delay(200);
   
   Serial.println("╔════════════════════════════════════╗");
-  Serial.println("║      Playing MP3 from URL          ║");
+  Serial.println("║   🔧 FIXED PLAYBACK (v5.1) 🔧      ║");
   Serial.println("╚════════════════════════════════════╝");
-  Serial.printf("Initial RAM: %d bytes\n", ESP.getFreeHeap());
-  Serial.print("URL: "); Serial.println(url);
-  Serial.println();
   
-  // !! تحرير ذاكرة مؤقتة - إيقاف BLE أثناء التشغيل !!
-  if (deviceConnected) {
-    Serial.println("→ Pausing BLE to free memory...");
-    BLEDevice::stopAdvertising();
-    delay(100);
-  }
+  // 1. رفع سرعة المعالج لمعالجة البيانات بسرعة
+  setCpuFrequencyMhz(240);
 
-  // === الخطوة 1: HTTP Stream ===
-  Serial.println("→ Creating HTTP stream...");
+  // 2. المصدر (الإنترنت)
   file_http = new AudioFileSourceHTTPStream(url);
-  if (!file_http) {
-    Serial.println("✗ Failed - Out of memory");
-    sendBleResponse("ERROR:NO_MEMORY");
-    BLEDevice::startAdvertising();
-    return;
-  }
+  if (!file_http) { sendBleResponse("ERROR:STREAM"); return; }
 
-  // الاتصال بالسيرفر
-  Serial.print("→ Connecting");
-  int timeout = 0;
-  while (!file_http->isOpen() && timeout < 40) { 
-    delay(200); 
-    timeout++; 
-    Serial.print("."); 
-  }
-  Serial.println();
-  
-  if (!file_http->isOpen()) {
-    Serial.println("✗ Connection timeout!");
-    Serial.println("  Check: WiFi, URL, or server status");
-    stopAudio();
-    sendBleResponse("ERROR:CONNECTION_FAILED");
-    BLEDevice::startAdvertising();
-    return;
-  }
-  Serial.println("✓ Connected to server!");
-  Serial.printf("  RAM after connection: %d bytes\n", ESP.getFreeHeap());
+  // 3. البفر (Buffer)
+  // نستخدم 4KB لأنه الحجم الذي اشتغل معك سابقاً بدون انهيار
+  Serial.println("→ Buffer: 4KB");
+  buff = new AudioFileSourceBuffer(file_http, 4096);
+  if (!buff) { stopAudio(); sendBleResponse("ERROR:BUFFER"); return; }
 
-  // === الخطوة 2: Buffer ===
-  // استخدام buffer أصغر لتوفير ذاكرة كافية لـ I2S DMA
-  Serial.println("→ Creating buffer (4KB)...");
-  buff = new AudioFileSourceBuffer(file_http, 4096); // 4KB buffer - كافٍ ومقتصد
-  if (!buff) {
-    Serial.println("✗ Buffer creation failed");
-    stopAudio();
-    sendBleResponse("ERROR:BUFFER_FAILED");
-    return;
-  }
+  // 4. إعداد I2S (تم تصحيح الخطأ هنا)
+  Serial.println("→ I2S: External DAC Mode");
+  out = new AudioOutputI2S(0, AudioOutputI2S::EXTERNAL_I2S);
   
-  // ملء البفر مسبقاً
-  Serial.print("→ Pre-buffering");
-  for(int i = 0; i < 8; i++) {
-    delay(50);
-    Serial.print(".");
-  }
-  Serial.println(" Done!");
-  Serial.printf("  RAM after buffer: %d bytes\n", ESP.getFreeHeap());
-  
-  // تأكد من وجود ذاكرة كافية
-  if (ESP.getFreeHeap() < 30000) {
-    Serial.println("✗ Not enough RAM for I2S DMA!");
-    Serial.println("  Need at least 30KB free");
-    stopAudio();
-    sendBleResponse("ERROR:LOW_MEMORY");
-    return;
-  }
-
-  // === الخطوة 3: I2S Output ===
-  Serial.println("→ Configuring I2S...");
-  
-  // !! تقليل DMA buffers لتوفير الذاكرة !!
-  out = new AudioOutputI2S(0, 0); // استخدام internal DAC بدلاً من external
-  if (!out) {
-    Serial.println("✗ I2S creation failed");
-    stopAudio();
-    sendBleResponse("ERROR:I2S_FAILED");
-    return;
-  }
-  
-  // الإعداد الصحيح
+  // تعيين الأرجل (تأكدي أن الأسلاك موصلة بهذه الأرجل فعلياً)
+  // BCLK=26, LRC=27, DOUT=25
   out->SetPinout(I2S_BCLK, I2S_LRC, I2S_DOUT);
-  out->SetOutputModeMono(false);  // Stereo
-  out->SetGain(0.7);              // حجم معتدل
   
-  // *** تم حذف SetBufferSize لحل مشكلة الـ Compilation ***
-  
-  Serial.println("✓ I2S configured");
-  Serial.printf("  RAM before begin: %d bytes\n", ESP.getFreeHeap());
+  // خفضنا الصوت جداً (10%) لتجربة صفاء الصوت
+  // إذا كان "طزززز" عالياً جداً، فهذا يعني أن المكبر يشتغل بأقصى طاقة (Gain Error)
+  out->SetGain(0.10);
 
-  // === الخطوة 4: MP3 Decoder ===
-  Serial.println("→ Creating MP3 decoder...");
+  // 5. المشغل
   mp3 = new AudioGeneratorMP3();
-  if (!mp3) {
-    Serial.println("✗ Decoder creation failed");
-    stopAudio();
-    sendBleResponse("ERROR:DECODER_FAILED");
-    return;
-  }
-  Serial.println("✓ Decoder ready");
   
-  // تشغيل المكبر
+  // 6. تشغيل الأمبليفاير (إعادة تعيين الكهرباء)
+  digitalWrite(SHUTDOWN_PIN, LOW); 
+  delay(50);
   digitalWrite(SHUTDOWN_PIN, HIGH);
-  delay(200);
-  Serial.println("✓ Amplifier ON");
+  delay(100);
 
-  // === الخطوة 5: البدء ===
-  Serial.println("\n→ Starting MP3 playback...");
-  Serial.printf("  Final RAM: %d bytes\n", ESP.getFreeHeap());
+  Serial.println("→ Starting...");
   
-  // !! المحاولة مع معالجة أفضل !!
-  bool started = mp3->begin(buff, out);
-  
-  if (!started) {
-    Serial.println("\n╔════════════════════════════════════╗");
-    Serial.println("║  ✗✗✗ DECODE FAILED ✗✗✗             ║");
-    Serial.println("╠════════════════════════════════════╣");
-    Serial.println("║  Possible Solutions:               ║");
-    Serial.println("║                                    ║");
-    Serial.println("║  1. Tools → Partition Scheme       ║");
-    Serial.println("║     → Huge APP (3MB)               ║");
-    Serial.println("║                                    ║");
-    Serial.println("║  2. Update ESP8266Audio library    ║");
-    Serial.println("║     to version 1.9.7               ║");
-    Serial.println("║                                    ║");
-    Serial.println("║  3. Check MP3 file format:         ║");
-    Serial.println("║     - Must be standard MP3         ║");
-    Serial.println("║     - Not AAC or M4A               ║");
-    Serial.println("║     - Sample rate: 44100Hz         ║");
-    Serial.println("║     - Bitrate: 128kbps max         ║");
-    Serial.println("║                                    ║");
-    Serial.println("║  4. Test with small file first     ║");
-    Serial.println("║                                    ║");
-    Serial.println("╚════════════════════════════════════╝\n");
-    
+  if (!mp3->begin(buff, out)) {
+    Serial.println("✗ Decode Failed");
     stopAudio();
-    sendBleResponse("ERROR:PLAYBACK_FAILED");
+    sendBleResponse("ERROR:DECODE");
     return;
   }
   
-  // نجح!
-  Serial.println("\n╔════════════════════════════════════╗");
-  Serial.println("║  ✓✓✓ SUCCESS! PLAYING! ✓✓✓         ║");
-  Serial.println("╚════════════════════════════════════╝\n");
+  Serial.println("✓ Playing...");
   sendBleResponse("AUDIO:PLAYING");
 }
 
@@ -2646,23 +3066,27 @@ void playMP3FromURL(const char* url) {
 // ===================================
 void executeCommand(String command) {
   Serial.println("\n╔════════════════════════════════════╗");
-  Serial.print("║  COMMAND: ");
+  Serial.print("║  CMD: ");
   Serial.print(command);
-  for(int i = command.length(); i < 24; i++) Serial.print(" ");
+  for(int i = command.length(); i < 28; i++) Serial.print(" ");
   Serial.println("║");
   Serial.println("╚════════════════════════════════════╝");
   
   String upperCmd = command;
   upperCmd.toUpperCase();
 
-  // === أوامر التشغيل ===
+  // === أوامر الاختبار ===
   if (upperCmd == "TEST") {
-    Serial.println("Testing with small MP3...");
+    Serial.println("🧪 Test: Tiny MP3 file");
     playMP3FromURL("http://www.soundjay.com/button/sounds/button-09.mp3");
   }
   else if (upperCmd == "TEST2") {
-    Serial.println("Testing with medium MP3...");
+    Serial.println("🧪 Test: Medium MP3 file");
     playMP3FromURL("http://commondatastorage.googleapis.com/codeskulptor-demos/DDR_assets/Kangaroo_MusiQue_-_The_Neverwritten_Role_Playing_Game.mp3");
+  }
+  else if (upperCmd == "TEST3") {
+    Serial.println("🧪 Test: Full MP3 (SoundHelix)");
+    playMP3FromURL("http://www.soundhelix.com/examples/mp3/SoundHelix-Song-1.mp3");
   }
   else if (upperCmd == "STOP") {
     stopAudio();
@@ -2689,40 +3113,39 @@ void executeCommand(String command) {
   
   // === أوامر النظام ===
   else if (upperCmd == "STATUS") {
-    Serial.println("\n=== SYSTEM STATUS ===");
-    Serial.printf("Free RAM: %d bytes\n", ESP.getFreeHeap());
-    Serial.printf("WiFi: %s (%s)\n", 
-                  WiFi.status() == WL_CONNECTED ? "Connected" : "Disconnected",
-                  WiFi.localIP().toString().c_str());
-    Serial.printf("BLE: %s\n", deviceConnected ? "Connected" : "Disconnected");
-    Serial.printf("Audio: %s\n", (mp3 && mp3->isRunning()) ? "Playing" : "Idle");
-    Serial.printf("MPU6050: %s\n", mpu.testConnection() ? "OK" : "Failed");
-    Serial.println("=====================\n");
+    Serial.println("\n╔════════ SYSTEM STATUS ════════╗");
+    Serial.printf("║ RAM Free: %d bytes         \n", ESP.getFreeHeap());
+    Serial.printf("║ WiFi: %s                   \n", WiFi.status() == WL_CONNECTED ? "Connected ✓" : "Disconnected ✗");
+    if (WiFi.status() == WL_CONNECTED) {
+      Serial.print("║ IP: "); Serial.println(WiFi.localIP());
+    }
+    Serial.printf("║ BLE: %s                    \n", deviceConnected ? "Connected ✓" : "Disconnected ✗");
+    Serial.printf("║ Audio: %s                  \n", (mp3 && mp3->isRunning()) ? "Playing ♪" : "Idle");
+    Serial.printf("║ MPU6050: %s                \n", mpu.testConnection() ? "OK ✓" : "Failed ✗");
+    Serial.println("╚═══════════════════════════════╝\n");
     sendBleResponse("STATUS:OK");
   }
   else if (upperCmd == "REBOOT") {
-    Serial.println("Rebooting in 2 seconds...");
+    Serial.println("Rebooting...");
     sendBleResponse("REBOOTING");
-    delay(2000);
+    delay(1000);
     ESP.restart();
   }
   else if (upperCmd == "HELP") {
-    Serial.println("\n=== COMMANDS ===");
-    Serial.println("TEST        - Test small MP3");
-    Serial.println("TEST2       - Test medium MP3");
-    Serial.println("PLAY:url    - Play from URL");
-    Serial.println("STOP        - Stop playback");
-    Serial.println("STARTSHAKE  - Shake detection");
-    Serial.println("STARTTILTY  - Tilt Y detection");
-    Serial.println("STARTTILTZ  - Tilt Z detection");
-    Serial.println("STATUS      - System info");
-    Serial.println("REBOOT      - Restart ESP32");
-    Serial.println("HELP        - This list");
-    Serial.println("================\n");
+    Serial.println("\n╔═══════ COMMANDS ═══════╗");
+    Serial.println("║ TEST       - Test small MP3");
+    Serial.println("║ TEST2      - Test medium MP3");
+    Serial.println("║ TEST3      - Test full MP3");
+    Serial.println("║ PLAY:url   - Play from URL");
+    Serial.println("║ STOP       - Stop playback");
+    Serial.println("║ STATUS     - System info");
+    Serial.println("║ REBOOT     - Restart");
+    Serial.println("║ HELP       - This list");
+    Serial.println("╚════════════════════════╝\n");
     sendBleResponse("HELP:OK");
   }
   else {
-    Serial.println("Unknown command. Type HELP");
+    Serial.println("❓ Unknown command");
     sendBleResponse("ERROR:UNKNOWN");
   }
 }
@@ -2736,7 +3159,6 @@ void detectShake() {
     answer = "SHAKE";
     sendBleResponse("GESTURE:SHAKE");
     isQuestionActive = false;
-    Serial.println("→ Detected: SHAKE");
   }
 }
 
@@ -2746,12 +3168,10 @@ void detectY() {
     answer = "FORWARD";
     sendBleResponse("GESTURE:FORWARD");
     isQuestionActive = false;
-    Serial.println("→ Detected: FORWARD");
   } else if (angleY < -LIMIT_DEG) {
     answer = "BACK";
     sendBleResponse("GESTURE:BACK");
     isQuestionActive = false;
-    Serial.println("→ Detected: BACK");
   }
 }
 
@@ -2761,12 +3181,10 @@ void detectZ() {
     answer = "RIGHT";
     sendBleResponse("GESTURE:RIGHT");
     isQuestionActive = false;
-    Serial.println("→ Detected: RIGHT");
   } else if (angleZ < -LIMIT_DEG) {
     answer = "LEFT";
     sendBleResponse("GESTURE:LEFT");
     isQuestionActive = false;
-    Serial.println("→ Detected: LEFT");
   }
 }
 
@@ -2806,20 +3224,18 @@ class MyCommandCallbacks: public BLECharacteristicCallbacks {
 void setup() {
   Serial.begin(115200);
   delay(2000);
+
+  Serial.println("\n\n╔════ SYSTEM START ════╗");
   
-  Serial.println("\n\n");
-  Serial.println("╔════════════════════════════════════╗");
-  Serial.println("║                                    ║");
-  Serial.println("║      🎵 CUBIE Audio System 🎵        ║");
-  Serial.println("║        Final Solution v5.0         ║");
-  Serial.println("║                                    ║");
-  Serial.println("╚════════════════════════════════════╝\n");
-  
+  // 1. !! الخطوة السحرية: تحرير ذاكرة البلوتوث الكلاسيكي لتوفير الرام !!
+  // هذا السطر يجب أن يكون قبل BLEDevice::init
+  esp_bt_controller_mem_release(ESP_BT_MODE_CLASSIC_BT);
+
   pinMode(SHUTDOWN_PIN, OUTPUT);
   digitalWrite(SHUTDOWN_PIN, LOW);
   
-  // BLE
-  Serial.println("→ BLE...");
+  // BLE Init
+  Serial.println("→ Initializing BLE...");
   BLEDevice::init("CUBIE");
   pServer = BLEDevice::createServer();
   pServer->setCallbacks(new MyServerCallbacks());
@@ -2839,19 +3255,17 @@ void setup() {
   
   pService->start();
   BLEDevice::startAdvertising();
-  Serial.println("  ✓ Ready\n");
+  Serial.println("  ✓ BLE Ready");
 
   // MPU6050
-  Serial.println("→ MPU6050...");
   Wire.begin(21, 22);
   mpu.initialize();
-  Serial.println(mpu.testConnection() ? "  ✓ OK\n" : "  ✗ Failed\n");
   
   // WiFi
-  Serial.print("→ WiFi");
+  Serial.print("→ Connecting WiFi");
   WiFi.begin(ssid, password);
   int tries = 0;
-  while (WiFi.status() != WL_CONNECTED && tries < 60) { 
+  while (WiFi.status() != WL_CONNECTED && tries < 20) { // قللت المحاولات لتسريع الإقلاع
     delay(500); 
     Serial.print("."); 
     tries++;
@@ -2859,22 +3273,12 @@ void setup() {
   Serial.println();
   
   if (WiFi.status() == WL_CONNECTED) {
-    Serial.println("  ✓ Connected");
-    Serial.print("  IP: "); Serial.println(WiFi.localIP());
+    Serial.println("  ✓ WiFi Connected");
   } else {
-    Serial.println("  ✗ Failed!");
+    Serial.println("  ✗ WiFi Failed");
   }
-  
-  Serial.println("\n╔════════════════════════════════════╗");
-  Serial.println("║        ✓ SYSTEM READY! ✓           ║");
-  Serial.println("╚════════════════════════════════════╝");
-  Serial.printf("\nFree RAM: %d bytes\n", ESP.getFreeHeap());
-  Serial.println("\n📌 IMPORTANT:");
-  Serial.println("   If audio fails, set:");
-  Serial.println("   Tools → Partition Scheme");
-  Serial.println("   → Huge APP (3MB No OTA)\n");
-  Serial.println("Commands: TEST, PLAY:url, STOP, HELP\n");
-  Serial.println("════════════════════════════════════\n");
+
+  Serial.printf("\n🚀 Free RAM after setup: %d bytes (Should be > 60000)\n", ESP.getFreeHeap());
 }
 
 // ===================================
@@ -2904,6 +3308,7 @@ void loop() {
   
   delay(1); 
 }
+
 
 
 //////////////////////////////////////////////////////////////
