@@ -1514,6 +1514,63 @@
 
 
 
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 import os
 import re
 from fastapi import APIRouter, HTTPException, Form, Request
@@ -1743,6 +1800,154 @@ def start_story(
         "required_move": question_mode
     }
 
+# @chat_router.post("/continue/")
+# def continue_story(
+#     request: Request,
+#     storyID: int = Form(...),
+#     userID: int = Form(...),
+#     childID: int = Form(...),
+#     answer: str = Form(...)
+# ):
+#     conn = sqlite3.connect(DB_NAME)
+#     c = conn.cursor()
+    
+#     c.execute("SELECT generated_story FROM stories WHERE storyID=? AND userID=?", (storyID, userID))
+#     row = c.fetchone()
+#     if not row:
+#         conn.close()
+#         raise HTTPException(status_code=404, detail="Story not found")
+#     old_story = row[0]
+
+#     c.execute("SELECT name, age, gender, grade FROM children WHERE childID=? AND userID=?", (childID, userID))
+#     child_row = c.fetchone()
+#     if not child_row:
+#         conn.close()
+#         raise HTTPException(status_code=404, detail="Child not found")
+        
+#     name, age, gender, grade = child_row
+#     config = get_story_config(grade)
+
+#     if storyID not in story_turns:
+#         # حساب تقريبي للدور بناءً على الفقرات
+#         current_turns = len(old_story.split('\n\n'))
+#         story_turns[storyID] = {"turns": current_turns, "max_turns": config['max_turns']}
+        
+#     turns_info = story_turns[storyID]
+#     turns_info["turns"] += 1
+#     turns, max_turns = turns_info["turns"], turns_info["max_turns"]
+
+#     child_action_desc = translate_answer_to_context(answer)
+
+#     # !! System Prompt للاستمرار !!
+#     if turns >= max_turns:
+#         # الجزء الأخير
+#         system_prompt = f"""أنت كيوبي. الطفل {name} ({age} سنوات) وصل للجزء الأخير من القصة.
+
+# 🎯 مهمتك:
+# - اكتب خاتمة جميلة للقصة
+# - هذا هو الجزء {turns} من {max_turns}
+# - الطول: حوالي {config['words_per_turn']} كلمة
+
+# 📝 قواعد الخاتمة:
+# 1. أنهِ القصة بشكل مرضٍ
+# 2. استخدم اسم {name}
+# 3. اجعلها إيجابية ومشجعة
+# 4. ضع [FINISH] في النهاية فقط
+
+# ⚠️ ممنوع:
+# - لا تطلب حركة من الطفل
+# - لا تفتح أحداث جديدة"""
+
+#         instruction = f"""القصة حتى الآن:
+# {old_story}
+
+# الحدث الأخير: {child_action_desc}
+
+# اكتب الخاتمة (الجزء {turns} من {max_turns}) في حوالي {config['words_per_turn']} كلمة."""
+
+#         finished = True
+#     else:
+#         # جزء وسطي
+#         system_prompt = f"""أنت كيوبي. الطفل {name} يستمع للجزء {turns} من {max_turns}.
+
+# 🎯 مهمتك:
+# - أكمل القصة بحدث جديد
+# - هذا ليس النهاية، بقي {max_turns - turns} جزء
+# - الطول: حوالي {config['words_per_turn']} كلمة
+
+# 📝 قواعد:
+# 1. استجب لاختيار الطفل السابق
+# 2. أضف حدث جديد ومشوق
+# 3. انتهِ بسؤال تفاعلي جديد
+# 4. استخدم اسم {name}
+
+# 🎮 اختر التاق المناسب:
+# - [TILTZ]: اختيار بين شيئين
+# - [TILTY]: تقدم أو تراجع
+# - [SHAKE]: حدث يحتاج طاقة
+
+# ⚠️ ممنوع:
+# - لا تنهِ القصة (بقي {max_turns - turns} جزء)
+# - لا تستخدم [FINISH]
+# - لا تقل "النهاية" أو "انتهت"""
+
+#         instruction = f"""القصة حتى الآن:
+# {old_story}
+
+# الحدث الأخير: {child_action_desc}
+
+# أكمل بالجزء {turns} من {max_turns} في حوالي {config['words_per_turn']} كلمة.
+# انتهِ بسؤال تفاعلي."""
+
+#         finished = False
+        
+#     messages = [
+#         {"role": "system", "content": system_prompt},
+#         {"role": "user", "content": instruction}
+#     ]
+
+#     print(f"🔄 [OpenAI] Continue Turn {turns}/{max_turns}...")
+#     response = client.chat.completions.create(
+#         model="gpt-4o-mini",
+#         messages=messages,
+#         temperature=0.7,
+#         max_tokens=500
+#     )
+    
+#     full_response_text = response.choices[0].message.content
+#     new_part, question_mode = extract_story_and_mode(full_response_text)
+    
+#     if finished:
+#         question_mode = "FINISH"
+#     else:
+#         # التحقق من عدم الإنهاء المبكر
+#         end_words = ['النهاية', 'انتهت', 'وصلنا']
+#         if any(word in new_part.lower() for word in end_words):
+#             print("⚠️ تحذير: محاولة إنهاء مبكرة")
+#             new_part = new_part.replace('النهاية', '').replace('انتهت', '').strip()
+#             new_part += f" ماذا سيفعل {name} الآن؟"
+
+#     # !! --- [تعديل هام] حفظ التاق مع النص في قاعدة البيانات --- !!
+#     text_to_save = new_part + f" [{question_mode}]"
+
+#     updated_story = old_story + "\n\n" + text_to_save
+#     c.execute("UPDATE stories SET generated_story=? WHERE storyID=?", (updated_story, storyID))
+#     conn.commit()
+#     conn.close()
+
+#     print(f"🎧 [Audio] Generating Turn {turns}/{max_turns}...")
+#     audio_path = generate_audio(new_part, userID, storyID, turn=turns)
+#     base_url = str(request.base_url).rstrip("/")
+#     audio_url = f"{base_url}/audio_files/{userID}/{storyID}/{os.path.basename(audio_path)}"
+
+#     return {
+#         "storyID": storyID, 
+#         "childID": childID, 
+#         "text": new_part,
+#         "audio_url": audio_url,
+#         "story_end": finished,
+#         "required_move": question_mode
+#     }
 @chat_router.post("/continue/")
 def continue_story(
     request: Request,
@@ -1771,7 +1976,6 @@ def continue_story(
     config = get_story_config(grade)
 
     if storyID not in story_turns:
-        # حساب تقريبي للدور بناءً على الفقرات
         current_turns = len(old_story.split('\n\n'))
         story_turns[storyID] = {"turns": current_turns, "max_turns": config['max_turns']}
         
@@ -1781,9 +1985,7 @@ def continue_story(
 
     child_action_desc = translate_answer_to_context(answer)
 
-    # !! System Prompt للاستمرار !!
     if turns >= max_turns:
-        # الجزء الأخير
         system_prompt = f"""أنت كيوبي. الطفل {name} ({age} سنوات) وصل للجزء الأخير من القصة.
 
 🎯 مهمتك:
@@ -1810,7 +2012,7 @@ def continue_story(
 
         finished = True
     else:
-        # جزء وسطي
+        # !! --- التعديل الأساسي هنا --- !!
         system_prompt = f"""أنت كيوبي. الطفل {name} يستمع للجزء {turns} من {max_turns}.
 
 🎯 مهمتك:
@@ -1818,21 +2020,36 @@ def continue_story(
 - هذا ليس النهاية، بقي {max_turns - turns} جزء
 - الطول: حوالي {config['words_per_turn']} كلمة
 
-📝 قواعد:
+📝 قواعد حاسمة للسؤال التفاعلي:
 1. استجب لاختيار الطفل السابق
 2. أضف حدث جديد ومشوق
-3. انتهِ بسؤال تفاعلي جديد
+3. ⚠️ قاعدة ذهبية: يجب أن يكون السؤال واضحاً ومحدداً مثل البداية تماماً
 4. استخدم اسم {name}
 
-🎮 اختر التاق المناسب:
-- [TILTZ]: اختيار بين شيئين
-- [TILTY]: تقدم أو تراجع
-- [SHAKE]: حدث يحتاج طاقة
+🎮 أمثلة للأسئلة الواضحة (يجب أن تكون بهذا التفصيل):
+
+لـ [TILTZ] (يمين/يسار):
+- ❌ خطأ: "إلى أين يذهب؟"
+- ✅ صح: "هل يذهب لليمين نحو الكهف المظلم، أم لليسار نحو الشلال؟ أمِل المكعب لليمين أو اليسار!"
+
+لـ [TILTY] (أمام/خلف):
+- ❌ خطأ: "ماذا يفعل؟"
+- ✅ صح: "هل يتقدم للأمام لفتح الباب، أم يتراجع للخلف للاختباء؟ أمِل المكعب للأمام أو الخلف!"
+
+لـ [SHAKE] (هز):
+- ❌ خطأ: "هل يساعد؟"
+- ✅ صح: "هل تساعد {name} في هز الشجرة لإسقاط التفاح؟ هز المكعب بقوة!"
+
+⚠️ يجب أن تذكر:
+- الخيارين بالتفصيل (مثل: "الكهف المظلم" و "الشلال")
+- الحركة المطلوبة بوضوح (مثل: "أمِل المكعب لليمين أو اليسار")
+- اسم {name} في السياق
 
 ⚠️ ممنوع:
 - لا تنهِ القصة (بقي {max_turns - turns} جزء)
 - لا تستخدم [FINISH]
-- لا تقل "النهاية" أو "انتهت"""
+- لا تقل "النهاية" أو "انتهت"
+- لا تكتب أسئلة غامضة أو عامة"""
 
         instruction = f"""القصة حتى الآن:
 {old_story}
@@ -1840,7 +2057,13 @@ def continue_story(
 الحدث الأخير: {child_action_desc}
 
 أكمل بالجزء {turns} من {max_turns} في حوالي {config['words_per_turn']} كلمة.
-انتهِ بسؤال تفاعلي."""
+
+⚠️ تذكير مهم: السؤال يجب أن يكون واضحاً ومحدداً مثل:
+- لليمين/اليسار: اذكر الخيارين بالتفصيل + "أمِل المكعب لليمين أو اليسار"
+- للأمام/الخلف: اذكر الخيارين + "أمِل المكعب للأمام أو الخلف"  
+- للهز: اذكر السبب + "هز المكعب بقوة"
+
+انتهِ بسؤال واضح ومحدد."""
 
         finished = False
         
@@ -1863,14 +2086,12 @@ def continue_story(
     if finished:
         question_mode = "FINISH"
     else:
-        # التحقق من عدم الإنهاء المبكر
         end_words = ['النهاية', 'انتهت', 'وصلنا']
         if any(word in new_part.lower() for word in end_words):
             print("⚠️ تحذير: محاولة إنهاء مبكرة")
             new_part = new_part.replace('النهاية', '').replace('انتهت', '').strip()
             new_part += f" ماذا سيفعل {name} الآن؟"
 
-    # !! --- [تعديل هام] حفظ التاق مع النص في قاعدة البيانات --- !!
     text_to_save = new_part + f" [{question_mode}]"
 
     updated_story = old_story + "\n\n" + text_to_save
@@ -1891,7 +2112,6 @@ def continue_story(
         "story_end": finished,
         "required_move": question_mode
     }
-
 
 
 # import os

@@ -1,343 +1,366 @@
+
 // #include <Wire.h>
 // #include <MPU6050.h>
 // #include <WiFi.h>
-
-// // --- مكتبات الصوت الجديدة (بديلة ESP8266Audio) ---
-// #include "AudioFileSourceHTTPStream.h" // لجلب الصوت من http
-// #include "AudioFileSourceBuffer.h"     // لتخزين مؤقت
-// #include "AudioGeneratorMP3.h"         // لفك تشفير MP3
-// #include "AudioOutputI2S.h"            // لإخراج الصوت للسماعة
-
-// // --- مكتبات البلوتوث الجديدة (BLE) ---
+// #include <SPI.h>
+// #include <Adafruit_VS1053.h>
 // #include <BLEDevice.h>
 // #include <BLEServer.h>
 // #include <BLEUtils.h>
 // #include <BLE2902.h>
+// #include <esp_task_wdt.h> // !! مكتبة مهمة لمنع إعادة التشغيل !!
 
-// // ===================================
-// // !!      إعدادات الواي فاي      !!
-// // ===================================
-// const char* ssid = "HUAWEI_E5576_3656";     // (شبكتك)
-// const char* password = "3GqA8bGYd3G"; // (شبكتك)
-// // ===================================
+// // ==================================================
+// // 1. إعدادات الواي فاي (شبكتك)
+// // ==================================================
+// const char* ssid = "HUAWEI_E5576_3656";
+// const char* password = "3GqA8bGYd3G";
+// // const char* ssid = "Salman_4G";
+// // const char* password = "0566339996";
 
-// // --- منفذ مفتاح الأمان (لحل مشكلة الطاقة) ---
-// #define SHUTDOWN_PIN 4 // (P4) موصول بـ SD
 
-// // --- إعدادات السماعة (مطابقة لأسلاكك) ---
-// #define I2S_DOUT 25
-// #define I2S_BCLK 26
-// #define I2S_LRC  27
+// // ==================================================
+// // 2. إعدادات أسلاك الصوت
+// // ==================================================
+// #define VS1053_RESET   23     
+// #define VS1053_CS      5      
+// #define VS1053_DCS     2      
+// #define VS1053_DREQ    27     
+// #define VS1053_MOSI    14
+// #define VS1053_MISO    19
+// #define VS1053_SCK     18
 
-// // --- إعدادات حساس الحركة ---
+// #define SHUTDOWN_PIN   4 
+
+// // ==================================================
+// // 3. كائنات النظام
+// // ==================================================
+// Adafruit_VS1053 musicPlayer = Adafruit_VS1053(VS1053_RESET, VS1053_CS, VS1053_DCS, VS1053_DREQ);
+// WiFiClient client;
 // MPU6050 mpu(0x68);
+
+// // متغيرات
 // const float LIMIT_DEG = 20.0;
 // const float SHAKE_LIMIT_G = 0.7;
 // const float ACCEL_SCALE = 16384.0;
 // int16_t accelX, accelY, accelZ, gyroX, gyroY, gyroZ;
 
-// // --- كائنات الصوت (الجديدة) ---
-// AudioGeneratorMP3 *mp3;
-// AudioFileSourceHTTPStream *file_http;
-// AudioFileSourceBuffer *buff;
-// AudioOutputI2S *out;
-
-// // --- متغيرات حالة التشغيل ---
 // bool isQuestionActive = false;
 // String mode = "";
 // String answer = "";
+// bool isPlaying = false;   
+// uint8_t mp3buff[32];      
 
-// // ===================================
-// // !!      إعدادات البلوتوث BLE      !!
-// // ===================================
+// // ==================================================
+// // 4. إعدادات البلوتوث
+// // ==================================================
 // BLEServer *pServer = NULL;
 // BLEService *pService = NULL;
-// BLECharacteristic *pCommandCharacteristic = NULL;  // لاستقبال الأوامر (WRITE)
-// BLECharacteristic *pResponseCharacteristic = NULL; // لإرسال الردود (NOTIFY)
+// BLECharacteristic *pCommandCharacteristic = NULL;
+// BLECharacteristic *pResponseCharacteristic = NULL;
 // bool deviceConnected = false;
-// std::string commandValue = "";
 
-// // تعريف UUIDs (أرقام تعريفية فريدة)
 // #define SERVICE_UUID        "4fafc201-1fb5-459e-8fcc-c5c9c331914b"
-// #define COMMAND_CHAR_UUID   "beb5483e-36e1-4688-b7f5-ea07361b26a8" // (للاستقبال: START, PLAY)
-// #define RESPONSE_CHAR_UUID  "c3856242-4f7f-4a6c-b3d4-4a6e43f5a25c" // (للإرسال: READY, RIGHT, LEFT)
+// #define COMMAND_CHAR_UUID   "beb5483e-36e1-4688-b7f5-ea07361b26a8"
+// #define RESPONSE_CHAR_UUID  "c3856242-4f7f-4a6c-b3d4-4a6e43f5a25c"
 
+// // ==================================================
+// // دوال المساعدة
+// // ==================================================
 
-// // ------------------------------------
-// // !! دالة إيقاف *كل* الأصوات !!
-// // ------------------------------------
-// void stopAudio() {
-//   if (mp3 && mp3->isRunning()) {
-//     mp3->stop();
-//     delete mp3;
-//     mp3 = nullptr;
-//   }
-//   if (buff) {
-//     buff->close();
-//     delete buff;
-//     buff = nullptr;
-//   }
-//   if (file_http) {
-//     file_http->close();
-//     delete file_http;
-//     file_http = nullptr;
-//   }
-//   if (out) {
-//     out->stop();
-//     delete out;
-//     out = nullptr;
-//   }
-//   digitalWrite(SHUTDOWN_PIN, HIGH); // "نوّم" السماعة
-// }
-
-// // ------------------------------------
-// // !! دالة تشغيل القصة (من الإنترنت) !!
-// // ------------------------------------
-// // (ابحث عن دالة playFileFromURL واستبدلها بهذا الكود)
-
-// void playFileFromURL(const char* url) {
-//   stopAudio();
-  
-//   // إعادة تهيئة الكائنات
-//   file_http = new AudioFileSourceHTTPStream(url);
-//   buff = new AudioFileSourceBuffer(file_http, 4096); // زيادة البفر قليلاً
-//   out = new AudioOutputI2S();
-//   out->SetPinout(I2S_BCLK, I2S_LRC, I2S_DOUT); 
-//   out->SetGain(0.6); // تعديل مستوى الصوت
-  
-//   mp3 = new AudioGeneratorMP3();
-  
-//   // !! التعديل المهم هنا !!
-//   // نحاول بدء التشغيل، إذا فشل (بسبب رابط خطأ أو واي فاي) نرسل إنهاء فوراً
-//   if (!mp3->begin(buff, out)) {
-//     Serial.println("ERROR: Could not start playback (Check URL or WiFi)");
-//     stopAudio(); // تنظيف الذاكرة
-//     sendBleResponse("AUDIO:FINISHED"); // نخدع التطبيق ليكمل ولا يعلق
-//   } else {
-//     Serial.println("Playback started...");
-//   }
-// }
-
-// // ------------------------------------
-// // !!    إرسال رد عبر BLE   !!
-// // ------------------------------------
 // void sendBleResponse(String message) {
-//   if (deviceConnected) {
+//   if (deviceConnected && pResponseCharacteristic) {
 //     pResponseCharacteristic->setValue(message.c_str());
 //     pResponseCharacteristic->notify();
-//     Serial.print("BLE Notify >> "); // للـ Serial Monitor
-//     Serial.println(message);
+//     Serial.print("BLE >> "); Serial.println(message);
 //   }
 // }
 
-// // ------------------------------------
-// // !!    معالجة أوامر BLE   !!
-// // ------------------------------------
-// void processBleCommand(std::string cmd) {
-//   String command = String(cmd.c_str());
-//   command.trim();
-//   command.toUpperCase();
-//   Serial.print("BLE Received << "); // للـ Serial Monitor
-//   Serial.println(command);
+// void stopAudio() {
+//   isPlaying = false;
+//   if (client.connected()) {
+//     client.stop();
+//   }
+//   Serial.println("Audio Stopped");
+// }
 
-//   // (أمر بدء السؤال)
-//   if (command.startsWith("START")) {
+// void parseUrl(String url, String &host, String &path, int &port) {
+//   int index = url.indexOf("://");
+//   String protocol = "http";
+//   if (index != -1) {
+//      protocol = url.substring(0, index);
+//      url = url.substring(index + 3);
+//   }
+//   port = 80;
+//   if (protocol == "https") port = 443; 
+
+//   index = url.indexOf('/');
+//   if (index != -1) {
+//     host = url.substring(0, index);
+//     path = url.substring(index);
+//   } else {
+//     host = url;
+//     path = "/";
+//   }
+  
+//   index = host.indexOf(':');
+//   if(index != -1){
+//      port = host.substring(index+1).toInt();
+//      host = host.substring(0, index);
+//   }
+// }
+
+// // دالة التشغيل (المحمية من الانهيار)
+// void playFromUrl(String url) {
+//   stopAudio(); 
+  
+//   String host, path;
+//   int port;
+//   parseUrl(url, host, path, port);
+
+//   Serial.print("Connecting to: "); Serial.println(host);
+
+//   // محاولة الاتصال مع تأخير بسيط
+//   if (!client.connect(host.c_str(), port)) {
+//     Serial.println("Connection Failed!");
+//     sendBleResponse("ERROR:CONNECTION");
+//     return;
+//   }
+
+//   client.print(String("GET ") + path + " HTTP/1.1\r\n" +
+//                "Host: " + host + "\r\n" + 
+//                "Connection: close\r\n\r\n");
+
+//   // !! الحلقة الحرجة التي تسبب الانهيار !!
+//   // تم تعديلها لتستخدم delay(5) بدلاً من yield() فقط
+//   unsigned long timeout = millis();
+//   while (client.connected()) {
+    
+//     // راحة اجبارية 5 مللي ثانية للسماح لـ BTC_TASK بالعمل
+//     delay(5); 
+    
+//     if (client.available()) {
+//         String line = client.readStringUntil('\n');
+//         if (line == "\r") {
+//           Serial.println("✓ Audio Start!");
+//           isPlaying = true; 
+//           sendBleResponse("AUDIO:PLAYING");
+//           break;
+//         }
+//     }
+    
+//     if (millis() - timeout > 8000) { // زيادة وقت الانتظار
+//       Serial.println("Timeout waiting for response");
+//       client.stop();
+//       return;
+//     }
+//   }
+// }
+
+// void processBleCommand(String command) {
+//   command.trim();
+//   Serial.print("CMD << "); Serial.println(command);
+
+//   if (command.startsWith("PLAY:")) {
+//     String url = command.substring(5);
+//     url.trim();
+//     playFromUrl(url);
+//   }
+//   else if (command == "TEST") {
+//     playFromUrl("http://ice1.somafm.com/u80s-128-mp3");
+//   }
+//   else if (command == "STOP" || command == "STOP_AUDIO") {
+//     stopAudio();
+//     sendBleResponse("AUDIO:STOPPED");
+//   }
+//   else if (command.startsWith("START")) {
 //     mode = command.substring(5);
 //     mode.trim();
 //     isQuestionActive = true;
 //     answer = "";
-//     sendBleResponse("READY:" + mode); // إرسال جاهزية للتطبيق
-//   }
-//   // (أمر تشغيل الصوت)
-//   else if (command.startsWith("PLAY:")) {
-//     String url = command.substring(5);
-//     url.trim(); 
-//     playFileFromURL(url.c_str());
-//   }
-//   // (أمر إيقاف الصوت)
-//   else if (command == "STOP_AUDIO") {
-//     stopAudio();
+//     sendBleResponse("READY:" + mode);
 //   }
 // }
 
-// // ------------------------------------
-// // دوال رصد الحركة (معدلة لـ BLE)
-// // ------------------------------------
+// // ==================================================
+// // دوال الحساسات والبلوتوث
+// // ==================================================
 // void detectShake() {
 //   float acc_g = sqrt((float)accelX*accelX + (float)accelY*accelY + (float)accelZ*accelZ) / ACCEL_SCALE;
 //   if (fabs(acc_g - 1.0) > SHAKE_LIMIT_G) {
 //     answer = "SHAKE";
-//     sendBleResponse(answer); // إرسال الجواب للتطبيق
+//     sendBleResponse("GESTURE:SHAKE");
 //     isQuestionActive = false;
 //   }
 // }
+
 // void detectY() {
 //   float angleY = atan2(accelX, sqrt(accelY*accelY + accelZ*accelZ)) * 180.0 / PI;
 //   if (angleY > LIMIT_DEG) {
 //     answer = "FORWARD";
-//     sendBleResponse(answer); // إرسال الجواب للتطبيق
+//     sendBleResponse("GESTURE:FORWARD");
 //     isQuestionActive = false;
 //   } else if (angleY < -LIMIT_DEG) {
 //     answer = "BACK";
-//     sendBleResponse(answer); // إرسال الجواب للتطبيق
+//     sendBleResponse("GESTURE:BACK");
 //     isQuestionActive = false;
 //   }
 // }
+
 // void detectZ() {
 //   float angleZ = atan2(accelY, accelZ) * 180.0 / PI;
 //   if (angleZ > LIMIT_DEG) {
 //     answer = "RIGHT";
-//     sendBleResponse(answer); // إرسال الجواب للتطبيق
+//     sendBleResponse("GESTURE:RIGHT");
 //     isQuestionActive = false;
 //   } else if (angleZ < -LIMIT_DEG) {
 //     answer = "LEFT";
-//     sendBleResponse(answer); // إرسال الجواب للتطبيق
+//     sendBleResponse("GESTURE:LEFT");
 //     isQuestionActive = false;
 //   }
 // }
 
-// // ===================================
-// // !!      كلاسات البلوتوث BLE      !!
-// // ===================================
-
-// // كلاس للتعامل مع الاتصال (connect/disconnect)
 // class MyServerCallbacks: public BLEServerCallbacks {
 //     void onConnect(BLEServer* pServer) {
 //       deviceConnected = true;
-//       Serial.println("Device connected");
+//       Serial.println("BLE Device Connected");
 //     }
-
 //     void onDisconnect(BLEServer* pServer) {
 //       deviceConnected = false;
-//       Serial.println("Device disconnected");
-//       BLEDevice::startAdvertising(); // ارجع للإعلان عن نفسك
-//       Serial.println("Start advertising...");
+//       BLEDevice::startAdvertising();
+//       Serial.println("BLE Disconnected - Advertising");
 //     }
 // };
 
-// // كلاس للتعامل مع استقبال الأوامر (onWrite)
 // class MyCommandCallbacks: public BLECharacteristicCallbacks {
 //     void onWrite(BLECharacteristic *pCharacteristic) {
 //       std::string value = pCharacteristic->getValue().c_str();
 //       if (value.length() > 0) {
-//         processBleCommand(value); // استدعاء دالة معالجة الأوامر
+//         processBleCommand(String(value.c_str()));
 //       }
 //     }
 // };
 
-// // ------------------------------------
-// // Setup
-// // ------------------------------------
+// // ==================================================
+// // SETUP
+// // ==================================================
 // void setup() {
 //   Serial.begin(115200);
+//   delay(1000);
 
-//   // --- 1. إعداد مفتاح الأمان (SD Pin) ---
+//   // 1. !! إعداد نظام الحماية Watchdog (الكود الجديد المتوافق مع v3.0+) !!
+//   // نقوم بإيقاف المؤقت القديم أولاً ثم نعيد تهيئته بالإعدادات الجديدة (30 ثانية)
+//   esp_task_wdt_deinit();
+  
+//   esp_task_wdt_config_t twdt_config = {
+//       .timeout_ms = 30000,      // 30 ثانية
+//       .idle_core_mask = (1 << 0), // مراقبة النواة 0 (التي كانت تسبب التعليق)
+//       .trigger_panic = false,   // عدم عمل ريستارت فوري
+//   };
+//   esp_task_wdt_init(&twdt_config);
+//   esp_task_wdt_add(NULL); // تسجيل هذه المهمة (loop) في نظام الحماية
+  
+//   setCpuFrequencyMhz(240);
+//   Serial.println("\n╔════ CUBIE ANTI-CRASH v13.1 (Fixed) ════╗");
+
+//   WiFi.setSleep(false); 
+  
 //   pinMode(SHUTDOWN_PIN, OUTPUT);
-//   digitalWrite(SHUTDOWN_PIN, HIGH); // "نوّم" السماعة فوراً
-//   Serial.println("Amplifier put to sleep immediately.");
-  
-//   // --- 2. تشغيل البلوتوث BLE (بدلاً من SerialBT) ---
-//   Serial.println("Starting BLE...");
-//   BLEDevice::init("CUBIE"); // هذا هو الاسم الذي سيظهر في الجوال
-  
+//   digitalWrite(SHUTDOWN_PIN, HIGH); 
+
+//   SPI.begin(VS1053_SCK, VS1053_MISO, VS1053_MOSI);
+
+//   Serial.print("Connecting WiFi");
+//   WiFi.begin(ssid, password);
+//   int retries = 0;
+//   while (WiFi.status() != WL_CONNECTED && retries < 20) {
+//     delay(500); Serial.print(".");
+//     retries++;
+//   }
+//   if (WiFi.status() == WL_CONNECTED) {
+//     Serial.println("\n✓ WiFi Connected");
+//     Serial.print("  IP: "); Serial.println(WiFi.localIP());
+//   } else {
+//     Serial.println("\n✗ WiFi Failed!");
+//   }
+
+//   if (!musicPlayer.begin()) {
+//      Serial.println("✗ VS1053 not found (Check Wiring)");
+//   } else {
+//      Serial.println("✓ VS1053 Ready");
+//      musicPlayer.setVolume(10, 10); 
+//      musicPlayer.sineTest(0x44, 100); 
+//   }
+
+//   Wire.begin(21, 22);
+//   mpu.initialize();
+//   if (mpu.testConnection()) Serial.println("✓ MPU6050 Ready");
+//   else Serial.println("✗ MPU6050 Failed");
+
+//   BLEDevice::init("CUBIE");
 //   pServer = BLEDevice::createServer();
 //   pServer->setCallbacks(new MyServerCallbacks());
   
 //   pService = pServer->createService(SERVICE_UUID);
   
-//   // إنشاء خاصية استقبال الأوامر (App -> ESP32)
 //   pCommandCharacteristic = pService->createCharacteristic(
 //                              COMMAND_CHAR_UUID,
 //                              BLECharacteristic::PROPERTY_WRITE
 //                            );
 //   pCommandCharacteristic->setCallbacks(new MyCommandCallbacks());
 
-//   // إنشاء خاصية إرسال الردود (ESP32 -> App)
 //   pResponseCharacteristic = pService->createCharacteristic(
 //                               RESPONSE_CHAR_UUID,
 //                               BLECharacteristic::PROPERTY_NOTIFY
 //                             );
-//   pResponseCharacteristic->addDescriptor(new BLE2902()); // مهم للإشعارات
+//   pResponseCharacteristic->addDescriptor(new BLE2902());
   
 //   pService->start();
-  
-//   BLEAdvertising *pAdvertising = BLEDevice::getAdvertising();
-//   pAdvertising->addServiceUUID(SERVICE_UUID);
-//   pAdvertising->setScanResponse(true);
-//   pAdvertising->setMinPreferred(0x06); 
-//   pAdvertising->setMinPreferred(0x12);
 //   BLEDevice::startAdvertising();
-//   Serial.println("BLE Advertising started. Waiting for client...");
-
-//   // --- 3. تشغيل حساس الحركة ---
-//   Wire.begin(21, 22);
-//   mpu.initialize();
-//   Serial.println("Testing MPU6050 connection...");
-//   if (mpu.testConnection()) {
-//     Serial.println("MPU6050 connection successful!");
-//     mpu.setSleepEnabled(false);
-//   } else {
-//     Serial.println("MPU6050 connection failed! Check wiring.");
-//   }
-
-//   // --- 4. تشغيل الواي فاي !! ---
-//   Serial.print("Connecting to WiFi: ");
-//   Serial.println(ssid);
-//   WiFi.begin(ssid, password);
-//   int wifi_retries = 20;
-//   while (WiFi.status() != WL_CONNECTED && wifi_retries > 0) {
-//     delay(500);
-//     Serial.print(".");
-//     wifi_retries--;
-//   }
-
-//   if (WiFi.status() != WL_CONNECTED) {
-//      Serial.println("");
-//      Serial.println("WiFi connection FAILED! Check SSID and Password.");
-//   } else {
-//     Serial.println("");
-//     Serial.println("WiFi connected!");
-//     Serial.print("IP address: ");
-//     Serial.println(WiFi.localIP());
-//   }
-
-//   Serial.println("--- System Ready (WiFi + BLE) ---");
+//   Serial.println("✓ BLE Advertising");
+//   Serial.println("╚════════════════════════════╝");
 // }
 
-// // ------------------------------------
-// // Loop
-// // ------------------------------------
+// // ==================================================
+// // LOOP
+// // ==================================================
 // void loop() {
   
-//   // لا نحتاج لـ handleBluetoothCommands() هنا
-//   // لأن الـ BLE يعمل بالكولباك (onWrite)
+//   // إعادة تعيين مؤقت الحماية في كل دورة (تطعيم الكلب حتى لا يعضنا)
+//   esp_task_wdt_reset();
 
-//   // رصد الحركة (إذا كان هناك سؤال)
-//   if (isQuestionActive && answer.length() == 0) {
+//   // معالجة الصوت
+//   if (isPlaying) {
+//     if (client.connected() && client.available() > 0) {
+      
+//       // نقل البيانات (بحد أقصى 2 كيلوبايت في المرة الواحدة)
+//       int bytesProcessed = 0;
+//       while (client.available() > 0 && musicPlayer.readyForData() && bytesProcessed < 2048) {
+//         int bytes = client.read(mp3buff, 32);
+//         musicPlayer.playData(mp3buff, bytes);
+//         bytesProcessed += bytes;
+//       }
+      
+//     } else {
+//       if (!client.connected() && isPlaying) {
+//         Serial.println("Stream Ended");
+//         stopAudio();
+//         sendBleResponse("AUDIO:FINISHED");
+//       }
+//     }
+//   }
+
+//   // معالجة الحساسات
+//   if (isQuestionActive && answer == "") {
 //     mpu.getMotion6(&accelX, &accelY, &accelZ, &gyroX, &gyroY, &gyroZ);
 //     if (mode == "SHAKE") detectShake();
 //     else if (mode == "TILTY") detectY();
 //     else if (mode == "TILTZ") detectZ();
 //   }
 
-//   // --- سطر مهم لتشغيل صوت الإنترنت ---
-//   if (mp3 && mp3->isRunning()) {
-//     if (!mp3->loop()) {
-//       stopAudio(); // أوقف الصوت عند الانتهاء
-//       Serial.println("MP3 Stream Finished.");
-//       sendBleResponse("AUDIO:FINISHED");
-//     }
-//   }
-  
-//   delay(50);
+//   // تأخير مهم جداً لمنع تعليق البلوتوث
+//   delay(5); 
 // }
-
-
-
-
-
-
-
 
 
 
@@ -350,20 +373,13 @@
 #include <BLEServer.h>
 #include <BLEUtils.h>
 #include <BLE2902.h>
-#include <esp_task_wdt.h> // !! مكتبة مهمة لمنع إعادة التشغيل !!
+#include <esp_task_wdt.h>
 
-// ==================================================
-// 1. إعدادات الواي فاي (شبكتك)
-// ==================================================
-// const char* ssid = "HUAWEI_E5576_3656";
-// const char* password = "3GqA8bGYd3G";
-const char* ssid = "Salman_4G";
-const char* password = "0566339996";
+// const char* ssid = "Salman_4G";
+// const char* password = "0566339996";
+const char* ssid = "HUAWEI_E5576_3656";
+const char* password = "3GqA8bGYd3G";
 
-
-// ==================================================
-// 2. إعدادات أسلاك الصوت
-// ==================================================
 #define VS1053_RESET   23     
 #define VS1053_CS      5      
 #define VS1053_DCS     2      
@@ -371,17 +387,12 @@ const char* password = "0566339996";
 #define VS1053_MOSI    14
 #define VS1053_MISO    19
 #define VS1053_SCK     18
-
 #define SHUTDOWN_PIN   4 
 
-// ==================================================
-// 3. كائنات النظام
-// ==================================================
 Adafruit_VS1053 musicPlayer = Adafruit_VS1053(VS1053_RESET, VS1053_CS, VS1053_DCS, VS1053_DREQ);
 WiFiClient client;
 MPU6050 mpu(0x68);
 
-// متغيرات
 const float LIMIT_DEG = 20.0;
 const float SHAKE_LIMIT_G = 0.7;
 const float ACCEL_SCALE = 16384.0;
@@ -393,9 +404,6 @@ String answer = "";
 bool isPlaying = false;   
 uint8_t mp3buff[32];      
 
-// ==================================================
-// 4. إعدادات البلوتوث
-// ==================================================
 BLEServer *pServer = NULL;
 BLEService *pService = NULL;
 BLECharacteristic *pCommandCharacteristic = NULL;
@@ -405,10 +413,6 @@ bool deviceConnected = false;
 #define SERVICE_UUID        "4fafc201-1fb5-459e-8fcc-c5c9c331914b"
 #define COMMAND_CHAR_UUID   "beb5483e-36e1-4688-b7f5-ea07361b26a8"
 #define RESPONSE_CHAR_UUID  "c3856242-4f7f-4a6c-b3d4-4a6e43f5a25c"
-
-// ==================================================
-// دوال المساعدة
-// ==================================================
 
 void sendBleResponse(String message) {
   if (deviceConnected && pResponseCharacteristic) {
@@ -452,7 +456,6 @@ void parseUrl(String url, String &host, String &path, int &port) {
   }
 }
 
-// دالة التشغيل (المحمية من الانهيار)
 void playFromUrl(String url) {
   stopAudio(); 
   
@@ -462,7 +465,6 @@ void playFromUrl(String url) {
 
   Serial.print("Connecting to: "); Serial.println(host);
 
-  // محاولة الاتصال مع تأخير بسيط
   if (!client.connect(host.c_str(), port)) {
     Serial.println("Connection Failed!");
     sendBleResponse("ERROR:CONNECTION");
@@ -473,12 +475,8 @@ void playFromUrl(String url) {
                "Host: " + host + "\r\n" + 
                "Connection: close\r\n\r\n");
 
-  // !! الحلقة الحرجة التي تسبب الانهيار !!
-  // تم تعديلها لتستخدم delay(5) بدلاً من yield() فقط
   unsigned long timeout = millis();
   while (client.connected()) {
-    
-    // راحة اجبارية 5 مللي ثانية للسماح لـ BTC_TASK بالعمل
     delay(5); 
     
     if (client.available()) {
@@ -491,7 +489,7 @@ void playFromUrl(String url) {
         }
     }
     
-    if (millis() - timeout > 8000) { // زيادة وقت الانتظار
+    if (millis() - timeout > 8000) {
       Serial.println("Timeout waiting for response");
       client.stop();
       return;
@@ -524,11 +522,13 @@ void processBleCommand(String command) {
   }
 }
 
-// ==================================================
-// دوال الحساسات والبلوتوث
-// ==================================================
+// !! --- التعديل الأساسي: دوال الحساس المحسّنة --- !!
+
 void detectShake() {
+  // حساب قوة الهز
   float acc_g = sqrt((float)accelX*accelX + (float)accelY*accelY + (float)accelZ*accelZ) / ACCEL_SCALE;
+  
+  // فقط إذا كان الهز قوياً بما يكفي
   if (fabs(acc_g - 1.0) > SHAKE_LIMIT_G) {
     answer = "SHAKE";
     sendBleResponse("GESTURE:SHAKE");
@@ -537,7 +537,17 @@ void detectShake() {
 }
 
 void detectY() {
+  // حساب زاوية الميل الأمامي/الخلفي
   float angleY = atan2(accelX, sqrt(accelY*accelY + accelZ*accelZ)) * 180.0 / PI;
+  
+  // ⚠️ تجاهل الميل الجانبي (Z) لضمان عدم الخلط
+  float angleZ = atan2(accelY, accelZ) * 180.0 / PI;
+  if (fabs(angleZ) > LIMIT_DEG) {
+    // الطفل يميل جانبياً - تجاهل
+    return;
+  }
+  
+  // فقط إذا كان الميل واضحاً للأمام أو الخلف
   if (angleY > LIMIT_DEG) {
     answer = "FORWARD";
     sendBleResponse("GESTURE:FORWARD");
@@ -550,7 +560,17 @@ void detectY() {
 }
 
 void detectZ() {
+  // حساب زاوية الميل الجانبي (يمين/يسار)
   float angleZ = atan2(accelY, accelZ) * 180.0 / PI;
+  
+  // ⚠️ تجاهل الميل الأمامي/الخلفي (Y) لضمان عدم الخلط
+  float angleY = atan2(accelX, sqrt(accelY*accelY + accelZ*accelZ)) * 180.0 / PI;
+  if (fabs(angleY) > LIMIT_DEG) {
+    // الطفل يميل أمام/خلف - تجاهل
+    return;
+  }
+  
+  // فقط إذا كان الميل واضحاً لليمين أو اليسار
   if (angleZ > LIMIT_DEG) {
     answer = "RIGHT";
     sendBleResponse("GESTURE:RIGHT");
@@ -583,27 +603,22 @@ class MyCommandCallbacks: public BLECharacteristicCallbacks {
     }
 };
 
-// ==================================================
-// SETUP
-// ==================================================
 void setup() {
   Serial.begin(115200);
   delay(1000);
 
-  // 1. !! إعداد نظام الحماية Watchdog (الكود الجديد المتوافق مع v3.0+) !!
-  // نقوم بإيقاف المؤقت القديم أولاً ثم نعيد تهيئته بالإعدادات الجديدة (30 ثانية)
   esp_task_wdt_deinit();
   
   esp_task_wdt_config_t twdt_config = {
-      .timeout_ms = 30000,      // 30 ثانية
-      .idle_core_mask = (1 << 0), // مراقبة النواة 0 (التي كانت تسبب التعليق)
-      .trigger_panic = false,   // عدم عمل ريستارت فوري
+      .timeout_ms = 30000,
+      .idle_core_mask = (1 << 0),
+      .trigger_panic = false,
   };
   esp_task_wdt_init(&twdt_config);
-  esp_task_wdt_add(NULL); // تسجيل هذه المهمة (loop) في نظام الحماية
+  esp_task_wdt_add(NULL);
   
   setCpuFrequencyMhz(240);
-  Serial.println("\n╔════ CUBIE ANTI-CRASH v13.1 (Fixed) ════╗");
+  Serial.println("\n╔════ CUBIE ANTI-CRASH v13.2 (Fixed Gestures) ════╗");
 
   WiFi.setSleep(false); 
   
@@ -663,26 +678,17 @@ void setup() {
   Serial.println("╚════════════════════════════╝");
 }
 
-// ==================================================
-// LOOP
-// ==================================================
 void loop() {
-  
-  // إعادة تعيين مؤقت الحماية في كل دورة (تطعيم الكلب حتى لا يعضنا)
   esp_task_wdt_reset();
 
-  // معالجة الصوت
   if (isPlaying) {
     if (client.connected() && client.available() > 0) {
-      
-      // نقل البيانات (بحد أقصى 2 كيلوبايت في المرة الواحدة)
       int bytesProcessed = 0;
       while (client.available() > 0 && musicPlayer.readyForData() && bytesProcessed < 2048) {
         int bytes = client.read(mp3buff, 32);
         musicPlayer.playData(mp3buff, bytes);
         bytesProcessed += bytes;
       }
-      
     } else {
       if (!client.connected() && isPlaying) {
         Serial.println("Stream Ended");
@@ -692,20 +698,24 @@ void loop() {
     }
   }
 
-  // معالجة الحساسات
+  // !! --- معالجة الحساسات مع التحقق الصارم --- !!
   if (isQuestionActive && answer == "") {
     mpu.getMotion6(&accelX, &accelY, &accelZ, &gyroX, &gyroY, &gyroZ);
-    if (mode == "SHAKE") detectShake();
-    else if (mode == "TILTY") detectY();
-    else if (mode == "TILTZ") detectZ();
+    
+    // تنفيذ الحركة المطلوبة فقط
+    if (mode == "SHAKE") {
+      detectShake();
+    }
+    else if (mode == "TILTY") {
+      detectY(); // أمام/خلف فقط
+    }
+    else if (mode == "TILTZ") {
+      detectZ(); // يمين/يسار فقط
+    }
   }
 
-  // تأخير مهم جداً لمنع تعليق البلوتوث
   delay(5); 
 }
-
-
-
 
 
 // #include <SPI.h>
