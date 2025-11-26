@@ -384,11 +384,7 @@ class _StoryProgressScreenState extends State<StoryProgressScreen> {
   int? _currentUserID;
   int? _currentChildID;
 
-  // !! --- (التعديل الأساسي) --- !!
-  // متغير لتحديد نوع التشغيل
-  bool _isReplayMode = false; // true = من التاريخ، false = قصة جديدة
-
-  // للقصص من التاريخ
+  bool _isReplayMode = false;
   List<Map<String, dynamic>> _storyEvents = [];
   int _currentEventIndex = 0;
 
@@ -411,8 +407,6 @@ class _StoryProgressScreenState extends State<StoryProgressScreen> {
     _currentUserID = _appState.currentUserID;
     _currentChildID = _appState.selectedChildID;
 
-    // !! --- (كشف نوع التشغيل) --- !!
-    // إذا جاء من التاريخ، سيكون هناك arguments
     WidgetsBinding.instance.addPostFrameCallback((_) {
       final args = ModalRoute.of(context)?.settings.arguments;
       if (args != null && args is Map) {
@@ -433,7 +427,6 @@ class _StoryProgressScreenState extends State<StoryProgressScreen> {
     super.dispose();
   }
 
-  // !! --- (للقصص من التاريخ) --- !!
   Future<void> _loadStoryForReplay() async {
     if (_isProcessing || _currentStoryID == null) return;
 
@@ -479,14 +472,7 @@ class _StoryProgressScreenState extends State<StoryProgressScreen> {
     _processBackendResponse(event);
   }
 
-  // !! --- (للقصص الجديدة - التشغيل الحي) --- !!
   Future<void> _startLiveStory() async {
-    // القصة جديدة، الباك إند أرسل الجزء الأول مسبقاً
-    // نحتاج فقط أن نحصل عليه من الـ AppState أو من arguments
-
-    // (للتبسيط، سنستدعي replay للحصول على الجزء الأول)
-    // لكن سنعامله كجزء وحيد ونستمر بـ /continue
-
     if (_isProcessing || _currentStoryID == null) return;
 
     setState(() {
@@ -495,11 +481,9 @@ class _StoryProgressScreenState extends State<StoryProgressScreen> {
     });
 
     try {
-      // جلب الجزء الأول (المحفوظ من /start)
       final storyData = await StoryService.replayStory(_currentStoryID!);
 
       if (storyData['events'] != null && (storyData['events'] as List).isNotEmpty) {
-        // خذ أول حدث فقط
         final firstEvent = storyData['events'][0];
         _processBackendResponse(firstEvent);
       } else {
@@ -519,27 +503,36 @@ class _StoryProgressScreenState extends State<StoryProgressScreen> {
     }
   }
 
-  // !! --- (استقبال ردود البلوتوث) --- !!
+  // !! --- الإصلاح الأساسي: ضمان انتظار رد الطفل --- !!
   void _onBleResponseReceived() {
     String response = _bleManager.lastSensorResponse;
     if (response.isEmpty) return;
 
+    print("📡 [BLE Response] $response");
+
     if (response.startsWith("AUDIO:FINISHED")) {
       print("🎵 Audio finished.");
 
-      if (_pendingMove.isNotEmpty && _pendingMove != "NONE") {
+      // !! المنطق الجديد: بعد انتهاء الصوت، دائماً نطلب حركة !!
+      if (_pendingMove.isNotEmpty && _pendingMove != "NONE" && _pendingMove != "FINISH") {
+        // هناك حركة مطلوبة - تفعيل الحساس
         _bleManager.sendCommand("START $_pendingMove");
         setState(() {
-          _statusText = "Your Turn! $_currentMoveRequired";
+          _statusText = _getMoveInstruction(_pendingMove);
           _isWaitingForMove = true;
           _pendingMove = "";
         });
+      } else if (_pendingMove == "FINISH") {
+        // القصة انتهت
+        setState(() {
+          _statusText = "The End!";
+          _isWaitingForMove = false;
+        });
       } else {
-        // لا حركة مطلوبة
+        // لا حركة (نادر جداً) - ننتقل تلقائياً
         if (_isReplayMode) {
           _moveToNextEvent();
         } else {
-          // قصة حية، انتظر حركة من الطفل أو أكمل تلقائياً
           _continueStoryWithMove("NEXT");
         }
       }
@@ -547,21 +540,29 @@ class _StoryProgressScreenState extends State<StoryProgressScreen> {
     else if (response.startsWith("READY:")) {
       print("✅ CUBIE ready for move.");
     }
-    else if (_isWaitingForMove) {
-      String move = response.trim().toUpperCase();
-      if (["LEFT", "RIGHT", "FORWARD", "BACK", "SHAKE"].contains(move)) {
+    else if (response.startsWith("GESTURE:")) {
+      // استقبال حركة من الطفل
+      if (_isWaitingForMove) {
+        String move = response.split(':')[1].trim().toUpperCase();
         print("🎮 Move received: $move");
 
-        if (_isReplayMode) {
-          _moveToNextEvent();
-        } else {
-          _continueStoryWithMove(move);
-        }
+        setState(() {
+          _isWaitingForMove = false;
+          _statusText = "Processing...";
+        });
+
+        // !! --- إضافة تأخير بسيط قبل المتابعة لتجنب التداخل --- !!
+        Future.delayed(Duration(milliseconds: 500), () {
+          if (_isReplayMode) {
+            _moveToNextEvent();
+          } else {
+            _continueStoryWithMove(move);
+          }
+        });
       }
     }
   }
 
-  // !! --- (للقصص من التاريخ) --- !!
   void _moveToNextEvent() {
     setState(() {
       _isWaitingForMove = false;
@@ -570,7 +571,6 @@ class _StoryProgressScreenState extends State<StoryProgressScreen> {
     _playCurrentEvent();
   }
 
-  // !! --- (للقصص الجديدة) --- !!
   Future<void> _continueStoryWithMove(String move) async {
     if (_isProcessing) return;
 
@@ -602,7 +602,20 @@ class _StoryProgressScreenState extends State<StoryProgressScreen> {
     }
   }
 
-  // !! --- (معالجة رد الباك إند) --- !!
+  // !! --- دالة لتحويل التاق إلى رسالة عربية واضحة --- !!
+  String _getMoveInstruction(String moveType) {
+    switch (moveType) {
+      case "TILTZ":
+        return "دورك! لف المكعب يمين أو يسار";
+      case "TILTY":
+        return "دورك! لف المكعب أمام أو خلف";
+      case "SHAKE":
+        return "دورك! هز المكعب بقوة";
+      default:
+        return "دورك!";
+    }
+  }
+
   void _processBackendResponse(Map<String, dynamic> storyData) {
     final String rawUrl = storyData['audio_url'] ?? '';
     final String audioUrl = _fixUrl(rawUrl);
@@ -620,10 +633,12 @@ class _StoryProgressScreenState extends State<StoryProgressScreen> {
       _currentMoveRequired = requiredMove;
     });
 
+    // !! --- المنطق المحدث: نفس الأولوية ولكن بدون زر Skip --- !!
     if (storyEnd) {
       setState(() {
         _statusText = "The End!";
         _isWaitingForMove = false;
+        _pendingMove = "FINISH";
       });
       if (audioUrl.isNotEmpty) {
         _bleManager.sendCommand("PLAY:$audioUrl");
@@ -631,21 +646,24 @@ class _StoryProgressScreenState extends State<StoryProgressScreen> {
       return;
     }
 
+    // تشغيل الصوت أولاً، ثم انتظار الحركة
     if (audioUrl.isNotEmpty) {
       _bleManager.sendCommand("PLAY:$audioUrl");
       _pendingMove = requiredMove;
       _isWaitingForMove = false;
       setState(() {
-        _statusText = "Listen...";
+        _statusText = "استمع للقصة...";
       });
     } else {
+      // لا يوجد صوت - نطلب الحركة فوراً
       if (requiredMove != "NONE") {
         _bleManager.sendCommand("START $requiredMove");
         setState(() {
           _isWaitingForMove = true;
-          _statusText = "Move Now!";
+          _statusText = _getMoveInstruction(requiredMove);
         });
       } else {
+        // لا صوت ولا حركة - ننتقل تلقائياً
         if (_isReplayMode) {
           _moveToNextEvent();
         } else {
@@ -667,7 +685,7 @@ class _StoryProgressScreenState extends State<StoryProgressScreen> {
   @override
   Widget build(BuildContext context) {
     bool isBleConnected = context.watch<BluetoothManager>().isConnected;
-    bool isAudioPlaying = _statusText == "Listen..." || _pendingMove.isNotEmpty;
+    bool isAudioPlaying = _statusText == "استمع للقصة..." || _pendingMove.isNotEmpty;
 
     return Scaffold(
       appBar: AppBar(
@@ -688,6 +706,7 @@ class _StoryProgressScreenState extends State<StoryProgressScreen> {
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
+            // 1. الحالة
             Text(
               _statusText,
               style: TextStyle(
@@ -695,16 +714,19 @@ class _StoryProgressScreenState extends State<StoryProgressScreen> {
                 fontWeight: FontWeight.bold,
                 color: Color(0xff254865),
               ),
+              textAlign: TextAlign.center,
             ),
             SizedBox(height: 20),
 
+            // 2. عداد الأجزاء (للقصص من التاريخ)
             if (_isReplayMode && _storyEvents.isNotEmpty)
               Text(
-                'Part ${_currentEventIndex + 1} of ${_storyEvents.length}',
+                'جزء ${_currentEventIndex + 1} من ${_storyEvents.length}',
                 style: TextStyle(fontSize: 16, color: Colors.grey[600]),
               ),
             SizedBox(height: 20),
 
+            // 3. نص القصة
             Container(
               padding: EdgeInsets.all(20),
               decoration: BoxDecoration(
@@ -735,6 +757,7 @@ class _StoryProgressScreenState extends State<StoryProgressScreen> {
             ),
             SizedBox(height: 40),
 
+            // 4. مؤشر التحميل
             if (_isProcessing)
               Column(
                 children: [
@@ -744,60 +767,51 @@ class _StoryProgressScreenState extends State<StoryProgressScreen> {
                 ],
               ),
 
+            // 5. !! مؤشر تشغيل الصوت (بدون زر Skip) !!
             if (!_isProcessing && isAudioPlaying)
               Column(
                 children: [
-                  Icon(Icons.volume_up_rounded, size: 40, color: Color(0xff254865)),
-                  SizedBox(height: 10),
-                  ClipRRect(
-                    borderRadius: BorderRadius.circular(10),
-                    child: LinearProgressIndicator(
-                      minHeight: 10,
-                      backgroundColor: Colors.grey[300],
-                      valueColor: AlwaysStoppedAnimation<Color>(Color(0xff254865)),
-                    ),
+                  Icon(Icons.volume_up_rounded, size: 50, color: Color(0xff254865)),
+                  SizedBox(height: 15),
+                  Text(
+                      "القصة تُشغَّل على CUBIE...",
+                      style: TextStyle(
+                          fontSize: 18,
+                          color: Colors.grey[700],
+                          fontWeight: FontWeight.w500
+                      )
                   ),
-                  SizedBox(height: 10),
-                  Text("Playing on CUBIE...", style: TextStyle(color: Colors.grey[600])),
-                ],
-              ),
-
-            if (!_isProcessing && isAudioPlaying)
-              Padding(
-                padding: const EdgeInsets.only(top: 30.0),
-                child: SizedBox(
-                  width: 200,
-                  height: 50,
-                  child: ElevatedButton.icon(
-                    onPressed: () {
-                      _bleManager.sendCommand("STOP_AUDIO");
-
-                      if (_pendingMove.isNotEmpty) {
-                        _bleManager.sendCommand("START $_pendingMove");
-                        setState(() {
-                          _statusText = "Your Turn! $_currentMoveRequired";
-                          _isWaitingForMove = true;
-                          _pendingMove = "";
-                        });
-                      } else {
-                        if (_isReplayMode) {
-                          _moveToNextEvent();
-                        } else {
-                          _continueStoryWithMove("NEXT");
-                        }
-                      }
-                    },
-                    icon: Icon(Icons.skip_next, color: Colors.white),
-                    label: Text("Skip Audio", style: TextStyle(fontSize: 18, color: Colors.white)),
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: Colors.orangeAccent,
-                      shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(25),
+                  SizedBox(height: 15),
+                  Container(
+                    width: 200,
+                    child: ClipRRect(
+                      borderRadius: BorderRadius.circular(10),
+                      child: LinearProgressIndicator(
+                        minHeight: 8,
+                        backgroundColor: Colors.grey[300],
+                        valueColor: AlwaysStoppedAnimation<Color>(Color(0xff254865)),
                       ),
                     ),
                   ),
-                ),
-              )
+                ],
+              ),
+
+            // 6. رسالة انتظار الحركة
+            if (!_isProcessing && _isWaitingForMove)
+              Column(
+                children: [
+                  Icon(Icons.touch_app, size: 50, color: Color(0xff4ab0d1)),
+                  SizedBox(height: 15),
+                  Text(
+                      "في انتظار حركتك...",
+                      style: TextStyle(
+                          fontSize: 18,
+                          color: Color(0xff254865),
+                          fontWeight: FontWeight.w600
+                      )
+                  ),
+                ],
+              ),
           ],
         ),
       ),

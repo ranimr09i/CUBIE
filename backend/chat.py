@@ -1134,6 +1134,386 @@
 
 
 
+
+
+
+
+
+
+
+# import os
+# import re
+# from fastapi import APIRouter, HTTPException, Form, Request
+# import sqlite3
+# from db import DB_NAME
+# from openai import OpenAI
+# from audio import generate_audio
+
+# chat_router = APIRouter()
+
+# client = OpenAI(api_key="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")
+
+
+# story_turns = {}
+
+# def get_story_config(grade_level: str):
+#     """
+#     إعدادات دقيقة بناءً على جدول Grade Levels
+#     """
+#     grade = grade_level.upper().strip()
+    
+#     configs = {
+#         'KG': {
+#             'max_turns': 3,
+#             'total_words': '70-100',
+#             'words_per_turn': 30,
+#             'duration': '1-2 دقائق',
+#             'skills': 'تحديد الأشياء، تذكر حدث واحد',
+#             'question_type': 'أسئلة بسيطة للتذكر'
+#         },
+#         'G1': {
+#             'max_turns': 4,
+#             'total_words': '120-180',
+#             'words_per_turn': 40,
+#             'duration': '2-3 دقائق',
+#             'skills': 'فهم جمل قصيرة، ترتيب حدثين',
+#             'question_type': 'أسئلة فهم مباشر'
+#         },
+#         'G2': {
+#             'max_turns': 4,
+#             'total_words': '200-300',
+#             'words_per_turn': 60,
+#             'duration': '3-4 دقائق',
+#             'skills': 'فهم السبب والنتيجة البسيطة',
+#             'question_type': 'لماذا / ماذا حدث'
+#         },
+#         'G3': {
+#             'max_turns': 5,
+#             'total_words': '300-450',
+#             'words_per_turn': 80,
+#             'duration': '4-5 دقائق',
+#             'skills': 'متابعة الأحداث البسيطة، استنتاج مباشر',
+#             'question_type': 'استنتاج بسيط'
+#         },
+#         'G4': {
+#             'max_turns': 5,
+#             'total_words': '450-600',
+#             'words_per_turn': 110,
+#             'duration': '5-6 دقائق',
+#             'skills': 'فهم أوصاف أطول، مقارنة الشخصيات',
+#             'question_type': 'مقارنة / كيف'
+#         },
+#         'G5': {
+#             'max_turns': 6,
+#             'total_words': '600-800',
+#             'words_per_turn': 130,
+#             'duration': '6-7 دقائق',
+#             'skills': 'استنتاج الأفكار الرئيسية، ربط الأحداث',
+#             'question_type': 'أسئلة مفتوحة'
+#         },
+#         'G6': {
+#             'max_turns': 7,
+#             'total_words': '800-1000',
+#             'words_per_turn': 140,
+#             'duration': '7-8 دقائق',
+#             'skills': 'فهم قصص متعددة الأحداث، أفكار مجردة',
+#             'question_type': 'استنتاج متقدم'
+#         }
+#     }
+    
+#     return configs.get(grade, configs['G3'])
+
+# def extract_story_and_mode(full_response: str):
+#     """استخراج النص والتاق"""
+#     modes = ["TILTZ", "TILTY", "SHAKE", "FINISH"]
+#     found_mode = "TILTZ"
+    
+#     clean_response = full_response.strip()
+#     matches = re.findall(r"\[(TILTZ|TILTY|SHAKE|FINISH)\]", clean_response.upper())
+    
+#     if matches:
+#         found_mode = matches[-1]
+#         story_part = re.sub(r"\[(TILTZ|TILTY|SHAKE|FINISH)\]", "", clean_response, flags=re.IGNORECASE).strip()
+#         return story_part, found_mode
+    
+#     return clean_response, found_mode
+
+# def translate_answer_to_context(answer: str):
+#     """ترجمة الحركة"""
+#     answer = answer.upper().strip()
+#     if "LEFT" in answer:
+#         return "الطفل اختار اليسار"
+#     elif "RIGHT" in answer:
+#         return "الطفل اختار اليمين"
+#     elif "FORWARD" in answer or "FRONT" in answer:
+#         return "الطفل اختار الأمام"
+#     elif "BACK" in answer:
+#         return "الطفل اختار الخلف"
+#     elif "SHAKE" in answer:
+#         return "الطفل قام بهز المكعب"
+#     else:
+#         return f"الطفل اختار: {answer}"
+
+# @chat_router.post("/start/")
+# def start_story(
+#     request: Request,
+#     userID: int = Form(...),
+#     childID: int = Form(...),
+#     genre: str = Form(...),
+#     description: str = Form(...)
+# ):
+#     conn = sqlite3.connect(DB_NAME)
+#     c = conn.cursor()
+#     c.execute("SELECT name, age, gender, grade FROM children WHERE childID=? AND userID=?", (childID, userID))
+#     row = c.fetchone()
+#     if not row:
+#         conn.close()
+#         raise HTTPException(status_code=404, detail="Child not found")
+    
+#     name, age, gender, grade = row
+#     config = get_story_config(grade)
+    
+#     # !! System Prompt الجديد - بدون أمثلة !!
+#     system_prompt = f"""أنت كيوبي، راوي قصص تفاعلية للأطفال.
+
+# 🎯 مهمتك:
+# - اكتب الجزء الأول فقط من قصة طويلة
+# - هذا ليس النهاية، بل البداية فقط
+# - يجب أن تنتهي بسؤال تفاعلي
+
+# 📊 إعدادات هذه القصة:
+# - الطفل: {name} ({age} سنوات، صف {grade})
+# - إجمالي أجزاء القصة: {config['max_turns']} جزء
+# - طول هذا الجزء: حوالي {config['words_per_turn']} كلمة
+# - مهارات الطفل: {config['skills']}
+
+# 📝 قواعد صارمة:
+# 1. اكتب فقط بداية القصة (الجزء 1 من {config['max_turns']})
+# 2. استخدم اسم الطفل ({name}) في القصة
+# 3. اللغة: عربية فصحى بسيطة تناسب عمر {age} سنوات
+# 4. انتهِ بسؤال يتطلب حركة بالمكعب
+# 5. لا تقل "النهاية" أو "انتهت القصة"
+# 6. ضع التاق المناسب في النهاية
+
+# 🎮 أنواع الأسئلة التفاعلية:
+# - [TILTZ]: اختيار بين شيئين (يمين/يسار)
+#   مثال: "أمِل المكعب لليمين للذهاب للغابة، أو لليسار للنهر"
+  
+# - [TILTY]: تقدم أو تراجع (أمام/خلف)
+#   مثال: "أمِل للأمام لدخول الكهف، أو للخلف للعودة"
+  
+# - [SHAKE]: حدث يحتاج طاقة
+#   مثال: "هز المكعب بقوة لفتح الباب السحري"
+
+# ⚠️ ممنوع منعاً باتاً:
+# - لا تستخدم كلمات النهاية (النهاية، انتهت، وصلنا)
+# - لا تقل [FINISH] في هذا الجزء
+# - لا تكتب قصة كاملة، فقط الجزء الأول
+
+# ✍️ الآن اكتب الجزء الأول من القصة فقط."""
+
+#     user_task_prompt = f"""معلومات القصة:
+# - النوع: {genre}
+# - الموضوع: {description}
+# - الطفل: {name}
+
+# اكتب بداية القصة (الجزء 1 من {config['max_turns']}) في حوالي {config['words_per_turn']} كلمة.
+# انتهِ بسؤال تفاعلي وضع التاق المناسب."""
+
+#     messages = [
+#         {"role": "system", "content": system_prompt},
+#         {"role": "user", "content": user_task_prompt}
+#     ]
+
+#     print(f"🔄 [OpenAI] Start Story (Grade: {grade}, Turn 1/{config['max_turns']})...")
+    
+#     response = client.chat.completions.create(
+#         model="gpt-4o-mini",
+#         messages=messages,
+#         temperature=0.7,
+#         max_tokens=500
+#     )
+    
+#     full_response_text = response.choices[0].message.content
+#     first_part, question_mode = extract_story_and_mode(full_response_text)
+
+#     # التحقق من عدم وجود كلمات النهاية
+#     end_words = ['النهاية', 'انتهت', 'وصلنا', 'finish', 'the end']
+#     if any(word in first_part.lower() for word in end_words):
+#         print("⚠️ تحذير: النموذج أنهى القصة مبكراً، سأعيد المحاولة...")
+#         question_mode = "TILTZ"  # فرض سؤال تفاعلي
+#         first_part = first_part.split('.')[0] + f". ماذا سيفعل {name} الآن؟"
+
+#     c.execute("""
+#         INSERT INTO stories (userID, genre, preferences, prompt, generated_story, audio_path)
+#         VALUES (?, ?, ?, ?, ?, ?)
+#     """, (userID, genre, description, user_task_prompt, first_part, None))
+#     conn.commit()
+#     story_id = c.lastrowid
+#     conn.close()
+
+#     story_turns[story_id] = {"turns": 1, "max_turns": config['max_turns']}
+    
+#     print(f"🎧 [Audio] Generating part 1/{config['max_turns']}...")
+#     audio_path = generate_audio(first_part, userID, story_id, turn=1)
+#     base_url = str(request.base_url).rstrip("/")
+#     audio_url = f"{base_url}/audio_files/{userID}/{story_id}/{os.path.basename(audio_path)}"
+
+#     return {
+#         "storyID": story_id, 
+#         "childID": childID, 
+#         "text": first_part, 
+#         "audio_url": audio_url,
+#         "story_end": False,
+#         "required_move": question_mode
+#     }
+
+# @chat_router.post("/continue/")
+# def continue_story(
+#     request: Request,
+#     storyID: int = Form(...),
+#     userID: int = Form(...),
+#     childID: int = Form(...),
+#     answer: str = Form(...)
+# ):
+#     conn = sqlite3.connect(DB_NAME)
+#     c = conn.cursor()
+    
+#     c.execute("SELECT generated_story FROM stories WHERE storyID=? AND userID=?", (storyID, userID))
+#     row = c.fetchone()
+#     if not row:
+#         conn.close()
+#         raise HTTPException(status_code=404, detail="Story not found")
+#     old_story = row[0]
+
+#     c.execute("SELECT name, age, gender, grade FROM children WHERE childID=? AND userID=?", (childID, userID))
+#     child_row = c.fetchone()
+#     if not child_row:
+#         conn.close()
+#         raise HTTPException(status_code=404, detail="Child not found")
+        
+#     name, age, gender, grade = child_row
+#     config = get_story_config(grade)
+
+#     if storyID not in story_turns:
+#         story_turns[storyID] = {"turns": 1, "max_turns": config['max_turns']}
+        
+#     turns_info = story_turns[storyID]
+#     turns_info["turns"] += 1
+#     turns, max_turns = turns_info["turns"], turns_info["max_turns"]
+
+#     child_action_desc = translate_answer_to_context(answer)
+
+#     # !! System Prompt للاستمرار !!
+#     if turns >= max_turns:
+#         # الجزء الأخير
+#         system_prompt = f"""أنت كيوبي. الطفل {name} ({age} سنوات) وصل للجزء الأخير من القصة.
+
+# 🎯 مهمتك:
+# - اكتب خاتمة جميلة للقصة
+# - هذا هو الجزء {turns} من {max_turns}
+# - الطول: حوالي {config['words_per_turn']} كلمة
+
+# 📝 قواعد الخاتمة:
+# 1. أنهِ القصة بشكل مرضٍ
+# 2. استخدم اسم {name}
+# 3. اجعلها إيجابية ومشجعة
+# 4. ضع [FINISH] في النهاية فقط
+
+# ⚠️ ممنوع:
+# - لا تطلب حركة من الطفل
+# - لا تفتح أحداث جديدة"""
+
+#         instruction = f"""القصة حتى الآن:
+# {old_story}
+
+# الحدث الأخير: {child_action_desc}
+
+# اكتب الخاتمة (الجزء {turns} من {max_turns}) في حوالي {config['words_per_turn']} كلمة."""
+
+#         finished = True
+#     else:
+#         # جزء وسطي
+#         system_prompt = f"""أنت كيوبي. الطفل {name} يستمع للجزء {turns} من {max_turns}.
+
+# 🎯 مهمتك:
+# - أكمل القصة بحدث جديد
+# - هذا ليس النهاية، بقي {max_turns - turns} جزء
+# - الطول: حوالي {config['words_per_turn']} كلمة
+
+# 📝 قواعد:
+# 1. استجب لاختيار الطفل السابق
+# 2. أضف حدث جديد ومشوق
+# 3. انتهِ بسؤال تفاعلي جديد
+# 4. استخدم اسم {name}
+
+# 🎮 اختر التاق المناسب:
+# - [TILTZ]: اختيار بين شيئين
+# - [TILTY]: تقدم أو تراجع
+# - [SHAKE]: حدث يحتاج طاقة
+
+# ⚠️ ممنوع:
+# - لا تنهِ القصة (بقي {max_turns - turns} جزء)
+# - لا تستخدم [FINISH]
+# - لا تقل "النهاية" أو "انتهت"""
+
+#         instruction = f"""القصة حتى الآن:
+# {old_story}
+
+# الحدث الأخير: {child_action_desc}
+
+# أكمل بالجزء {turns} من {max_turns} في حوالي {config['words_per_turn']} كلمة.
+# انتهِ بسؤال تفاعلي."""
+
+#         finished = False
+        
+#     messages = [
+#         {"role": "system", "content": system_prompt},
+#         {"role": "user", "content": instruction}
+#     ]
+
+#     print(f"🔄 [OpenAI] Continue Turn {turns}/{max_turns}...")
+#     response = client.chat.completions.create(
+#         model="gpt-4o-mini",
+#         messages=messages,
+#         temperature=0.7,
+#         max_tokens=500
+#     )
+    
+#     full_response_text = response.choices[0].message.content
+#     new_part, question_mode = extract_story_and_mode(full_response_text)
+    
+#     if finished:
+#         question_mode = "FINISH"
+#     else:
+#         # التحقق من عدم الإنهاء المبكر
+#         end_words = ['النهاية', 'انتهت', 'وصلنا']
+#         if any(word in new_part.lower() for word in end_words):
+#             print("⚠️ تحذير: محاولة إنهاء مبكرة")
+#             new_part = new_part.replace('النهاية', '').replace('انتهت', '').strip()
+#             new_part += f" ماذا سيفعل {name} الآن؟"
+
+#     updated_story = old_story + "\n\n" + new_part
+#     c.execute("UPDATE stories SET generated_story=? WHERE storyID=?", (updated_story, storyID))
+#     conn.commit()
+#     conn.close()
+
+#     print(f"🎧 [Audio] Generating Turn {turns}/{max_turns}...")
+#     audio_path = generate_audio(new_part, userID, storyID, turn=turns)
+#     base_url = str(request.base_url).rstrip("/")
+#     audio_url = f"{base_url}/audio_files/{userID}/{storyID}/{os.path.basename(audio_path)}"
+
+#     return {
+#         "storyID": storyID, 
+#         "childID": childID, 
+#         "text": new_part,
+#         "audio_url": audio_url,
+#         "story_end": finished,
+#         "required_move": question_mode
+#     }
+
+
+
 import os
 import re
 from fastapi import APIRouter, HTTPException, Form, Request
@@ -1145,7 +1525,6 @@ from audio import generate_audio
 chat_router = APIRouter()
 
 client = OpenAI(api_key="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")
-
 
 story_turns = {}
 
@@ -1266,7 +1645,6 @@ def start_story(
     name, age, gender, grade = row
     config = get_story_config(grade)
     
-    # !! System Prompt الجديد - بدون أمثلة !!
     system_prompt = f"""أنت كيوبي، راوي قصص تفاعلية للأطفال.
 
 🎯 مهمتك:
@@ -1337,10 +1715,13 @@ def start_story(
         question_mode = "TILTZ"  # فرض سؤال تفاعلي
         first_part = first_part.split('.')[0] + f". ماذا سيفعل {name} الآن؟"
 
+    # !! --- [تعديل هام] حفظ التاق مع النص في قاعدة البيانات --- !!
+    text_to_save = first_part + f" [{question_mode}]"
+
     c.execute("""
         INSERT INTO stories (userID, genre, preferences, prompt, generated_story, audio_path)
         VALUES (?, ?, ?, ?, ?, ?)
-    """, (userID, genre, description, user_task_prompt, first_part, None))
+    """, (userID, genre, description, user_task_prompt, text_to_save, None))
     conn.commit()
     story_id = c.lastrowid
     conn.close()
@@ -1348,6 +1729,7 @@ def start_story(
     story_turns[story_id] = {"turns": 1, "max_turns": config['max_turns']}
     
     print(f"🎧 [Audio] Generating part 1/{config['max_turns']}...")
+    # ملاحظة: نولد الصوت للنص النظيف فقط (first_part)
     audio_path = generate_audio(first_part, userID, story_id, turn=1)
     base_url = str(request.base_url).rstrip("/")
     audio_url = f"{base_url}/audio_files/{userID}/{story_id}/{os.path.basename(audio_path)}"
@@ -1389,7 +1771,9 @@ def continue_story(
     config = get_story_config(grade)
 
     if storyID not in story_turns:
-        story_turns[storyID] = {"turns": 1, "max_turns": config['max_turns']}
+        # حساب تقريبي للدور بناءً على الفقرات
+        current_turns = len(old_story.split('\n\n'))
+        story_turns[storyID] = {"turns": current_turns, "max_turns": config['max_turns']}
         
     turns_info = story_turns[storyID]
     turns_info["turns"] += 1
@@ -1486,7 +1870,10 @@ def continue_story(
             new_part = new_part.replace('النهاية', '').replace('انتهت', '').strip()
             new_part += f" ماذا سيفعل {name} الآن؟"
 
-    updated_story = old_story + "\n\n" + new_part
+    # !! --- [تعديل هام] حفظ التاق مع النص في قاعدة البيانات --- !!
+    text_to_save = new_part + f" [{question_mode}]"
+
+    updated_story = old_story + "\n\n" + text_to_save
     c.execute("UPDATE stories SET generated_story=? WHERE storyID=?", (updated_story, storyID))
     conn.commit()
     conn.close()
@@ -1504,10 +1891,6 @@ def continue_story(
         "story_end": finished,
         "required_move": question_mode
     }
-
-
-
-
 
 
 
