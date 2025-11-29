@@ -155,7 +155,7 @@ class _StoryProgressScreenState extends State<StoryProgressScreen> {
   void _onBleResponseReceived() {
     // !! --- تجاهل ردود البلوتوث في وضع إعادة التشغيل --- !!
     if (_isReplayMode) return;
-    
+
     String response = _bleManager.lastSensorResponse;
     if (response.isEmpty) return;
 
@@ -205,7 +205,7 @@ class _StoryProgressScreenState extends State<StoryProgressScreen> {
       _isWaitingForMove = false;
       _currentEventIndex++;
     });
-    
+
     // !! --- إضافة تأخير بين الأجزاء في وضع الإعادة --- !!
     Future.delayed(Duration(seconds: 2), () {
       if (mounted) {
