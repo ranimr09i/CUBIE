@@ -1,13 +1,9 @@
-#
-# UserProfile.py
-# (مسارات API الخاصة بالمستخدمين)
-#
 from fastapi import APIRouter, Depends, HTTPException, Form
 from sqlalchemy.orm import Session
 from database import User, get_db
-from passlib.context import CryptContext # (مكتبة التشفير)
+from passlib.context import CryptContext
 
-# إعداد التشفير
+
 pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
 router = APIRouter()
 
@@ -22,11 +18,11 @@ async def signup(
     if existing_user:
         raise HTTPException(status_code=400, detail="Email already exists")
     
-    hashed_password = pwd_context.hash(password) # تشفير الباسورد
+    hashed_password = pwd_context.hash(password) 
     new_user = User(
         name=name,
         email=email,
-        password=hashed_password # حفظ الباسورد المشفر
+        password=hashed_password 
     )
     db.add(new_user)
     db.commit()
@@ -38,7 +34,7 @@ async def signup(
 async def login(email: str = Form(...), password: str = Form(...), db: Session = Depends(get_db)):
     user = db.query(User).filter(User.email == email).first()
     
-    # التحقق من الباسورد المشفر
+
     if not user or not pwd_context.verify(password, user.password):
         raise HTTPException(status_code=401, detail="Invalid credentials")
     
@@ -56,7 +52,7 @@ async def edit_profile(
     user_id: int, 
     name: str = Form(...), 
     email: str = Form(...), 
-    password: str = Form(None), # (اختياري)
+    password: str = Form(None), 
     db: Session = Depends(get_db)
 ):
     user = db.query(User).get(user_id)

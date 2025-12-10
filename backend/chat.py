@@ -9,7 +9,7 @@ from audio import generate_audio
 
 chat_router = APIRouter()
 
-client = OpenAI(api_key="ur key")
+client = OpenAI(api_key="")
 
 story_turns = {}
 
@@ -46,9 +46,9 @@ def translate_answer_to_context(answer: str):
     elif "SHAKE" in answer: return "قام بهز المكعب بقوة"
     else: return f"قام بـ: {answer}"
 
-# ---------------------------------------------------------
-# START STORY
-# ---------------------------------------------------------
+
+
+
 @chat_router.post("/start/")
 def start_story(
     request: Request,
@@ -68,15 +68,15 @@ def start_story(
     name, age, gender, grade = row
     config = get_story_config(grade)
     
-    # اختيار عشوائي للحركة الأولى
+
     first_turn_mode = random.choice(["TILTZ", "TILTY"]) 
 
-    # تحديد تعليمات السؤال بناءً على الحركة
+
     if first_turn_mode == 'TILTZ':
         question_instruction = """يجب أن تختم النص بسؤال واضح جداً يطلب من الطفل إمالة المكعب لليمين أو اليسار.
         صيغة الجملة الأخيرة (إجبارية): "يا ترى، هل [الفعل الأول]؟ أمل المكعب لليمين! أم [الفعل الثاني]؟ أمل المكعب لليسار!"
         استبدل [الفعل الأول] و [الفعل الثاني] بأحداث القصة."""
-    else: # TILTY
+    else: 
         question_instruction = """يجب أن تختم النص بسؤال واضح جداً يطلب من الطفل إمالة المكعب للأمام أو الخلف.
         صيغة الجملة الأخيرة (إجبارية): "يا ترى، هل [الفعل الأول]؟ أمل المكعب للأمام! أم [الفعل الثاني]؟ أمل المكعب للخلف!"
         استبدل [الفعل الأول] و [الفعل الثاني] بأحداث القصة."""
@@ -108,14 +108,13 @@ def start_story(
             response = client.chat.completions.create(
                 model="gpt-4o-mini",
                 messages=messages,
-                temperature=0.6,  # رفعنا الحرارة قليلاً ليتجرأ على تعبئة الفراغات
+                temperature=0.6,  
                 top_p=0.9,
                 max_tokens=450
             )
             full_text = response.choices[0].message.content
             text_part, mode = extract_story_and_mode(full_text)
             
-            # التحقق من عدم وجود ... التي تدل على النسخ
             if mode and "..." not in text_part[-50:]: 
                 final_text = text_part
                 final_mode = mode
@@ -146,9 +145,9 @@ def start_story(
         "audio_url": audio_url, "story_end": False, "required_move": final_mode
     }
 
-# ---------------------------------------------------------
-# CONTINUE STORY
-# ---------------------------------------------------------
+
+
+
 @chat_router.post("/continue/")
 def continue_story(
     request: Request,
@@ -193,7 +192,6 @@ def continue_story(
         instruction = f"الطفل قرر: {child_action}. اكتب نهاية سعيدة للقصة ({config['words_per_turn']} كلمة). انتهِ بـ [FINISH]."
     else:
         possible_modes = ["TILTZ", "TILTY", "SHAKE"]
-        # منطق التنوع
         last_matches = re.findall(r"\[(TILTZ|TILTY|SHAKE)\]", old_story)
         if last_matches:
             last_mode = last_matches[-1]
@@ -202,12 +200,12 @@ def continue_story(
         
         next_mode = random.choice(possible_modes)
 
-        # تعليمات محددة جداً لكل نوع حركة لتجنب الـ "..."
+
         if next_mode == "TILTZ":
             action_instruction = "في نهاية النص، اسأل الطفل: 'هل تريد [الخيار 1]؟ أمل المكعب لليمين! أم تريد [الخيار 2]؟ أمل المكعب لليسار!' (عبئ الخيارات من أحداث القصة)."
         elif next_mode == "TILTY":
             action_instruction = "في نهاية النص، اسأل الطفل: 'هل تود [الخيار 1]؟ أمل المكعب للأمام! أم تفضل [الخيار 2]؟ أمل المكعب للخلف!' (عبئ الخيارات من أحداث القصة)."
-        else: # SHAKE
+        else: 
             action_instruction = "في نهاية النص، اطلب من الطفل المساعدة بحدث قوي. قل له: 'بسرعة! هز المكعب بقوة لكي [الحدث المطلوب]!'."
 
         instruction = f"""الحدث السابق: {child_action}.
@@ -234,13 +232,13 @@ def continue_story(
             response = client.chat.completions.create(
                 model="gpt-4o-mini",
                 messages=messages,
-                temperature=0.7, # حرارة تسمح بالإبداع في السؤال
+                temperature=0.7, 
                 max_tokens=450
             )
             text = response.choices[0].message.content
             part, mode = extract_story_and_mode(text)
             
-            # تحقق سريع أن النص لا يحتوي على قوالب فارغة
+
             if "..." not in part[-50:]:
                 if is_finish and (mode == "FINISH" or "النهاية" in part):
                     final_new_part = part

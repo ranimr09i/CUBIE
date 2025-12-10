@@ -13,10 +13,10 @@ app = FastAPI(title="CUBIE Backend")
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],  # يسمح لجميع المصادر (للتطوير)
+    allow_origins=["*"],  
     allow_credentials=True,
-    allow_methods=["*"],  # يسمح لجميع methods (GET, POST, etc)
-    allow_headers=["*"],  # يسمح لجميع headers
+    allow_methods=["*"], 
+    allow_headers=["*"],  
 )
 
 init_db()
